@@ -2310,46 +2310,29 @@ function buildSeqPanel() {
 
     var row = document.createElement('div');
     row.className = 'seq-row' + (isSkipped?' skipped-day':'');
-    row.setAttribute('data-id', c.id);
+    row.setAttribute('data-idx', i);
+    row.setAttribute('draggable', 'true');
 
-    // Up button
-    var btnUp = document.createElement('button');
-    btnUp.textContent = '▲';
-    btnUp.disabled = (i === 0);
-    btnUp.style.cssText = 'padding:4px 10px;border:1px solid var(--border);border-radius:4px;background:var(--bg);cursor:pointer;font-size:13px;line-height:1;margin-right:2px';
-    btnUp.onclick = (function(idx){ return function(e){ e.stopPropagation(); seqMove(idx, -1); }; })(i);
+    // Drag handle
+    var handle = document.createElement('span');
+    handle.className = 'seq-handle';
+    handle.innerHTML = '&#9776;';
+    handle.title = 'Drag to reorder';
 
-    // Down button
-    var btnDown = document.createElement('button');
-    btnDown.textContent = '▼';
-    btnDown.disabled = (i === seqCustomers.length-1);
-    btnDown.style.cssText = 'padding:4px 10px;border:1px solid var(--border);border-radius:4px;background:var(--bg);cursor:pointer;font-size:13px;line-height:1';
-    btnDown.onclick = (function(idx){ return function(e){ e.stopPropagation(); seqMove(idx, 1); }; })(i);
-
-    // Buttons wrapper
-    var btnWrap = document.createElement('div');
-    btnWrap.style.cssText = 'display:flex;gap:4px;flex-shrink:0;align-items:center';
-    btnWrap.appendChild(btnUp);
-    btnWrap.appendChild(btnDown);
-
-    // Number input
-    var numInput = document.createElement('input');
-    numInput.type = 'number';
-    numInput.min = '1';
-    numInput.value = Math.round(c.delivery_sequence||i+1);
-    numInput.className = 'seq-num';
-    numInput.onchange = (function(idx){ return function(){ seqCustomers[idx].delivery_sequence = parseFloat(this.value)||idx+1; }; })(i);
-    numInput.onblur = function() { seqNormalise(); buildSeqPanel(); };
+    // Sequence number circle
+    var seqBadge = document.createElement('div');
+    seqBadge.style.cssText = 'min-width:26px;height:26px;border-radius:50%;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0';
+    seqBadge.textContent = i+1;
 
     // Info
     var info = document.createElement('div');
     info.className = 'seq-info';
     info.innerHTML = '<div class="seq-name">'+esc(c.first_name||'')+' '+esc(c.last_name||'')+'</div>'
-      + '<div class="seq-meta">'+esc(c.customer_code||'')+' &middot; '+(c.morning_quota||0)+'L+'+(c.evening_quota||0)+'L eve</div>'
+      + '<div class="seq-meta">'+esc(c.customer_code||'')+' &middot; '+(c.morning_quota||0)+'L morn + '+(c.evening_quota||0)+'L eve</div>'
       + '<div class="seq-days">'+dayDots+'</div>';
 
-    row.appendChild(btnWrap);
-    row.appendChild(numInput);
+    row.appendChild(handle);
+    row.appendChild(seqBadge);
     row.appendChild(info);
 
     if (isSkipped) {
@@ -2360,20 +2343,44 @@ function buildSeqPanel() {
       row.appendChild(badge);
     }
 
+    // Drag events using closure
+    (function(rowEl, rowIdx) {
+      rowEl.addEventListener('dragstart', function(e) {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', String(rowIdx));
+        setTimeout(function(){ rowEl.style.opacity='0.4'; }, 0);
+      });
+      rowEl.addEventListener('dragend', function() {
+        rowEl.style.opacity = '1';
+        document.querySelectorAll('.seq-row').forEach(function(r){ r.style.borderTop=''; });
+      });
+      rowEl.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        document.querySelectorAll('.seq-row').forEach(function(r){ r.style.borderTop=''; });
+        rowEl.style.borderTop = '3px solid var(--brand)';
+      });
+      rowEl.addEventListener('dragleave', function() {
+        rowEl.style.borderTop = '';
+      });
+      rowEl.addEventListener('drop', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        rowEl.style.borderTop = '';
+        var fromIdx = parseInt(e.dataTransfer.getData('text/plain'));
+        var toIdx = rowIdx;
+        if (isNaN(fromIdx) || fromIdx === toIdx) return;
+        var moved = seqCustomers.splice(fromIdx, 1)[0];
+        seqCustomers.splice(toIdx, 0, moved);
+        seqNormalise();
+        buildSeqPanel();
+      });
+    })(row, i);
+
     list.appendChild(row);
   });
 
   panel.scrollIntoView({behavior:'smooth'});
-}
-
-function seqMove(idx, dir) {
-  var newIdx = idx + dir;
-  if (newIdx < 0 || newIdx >= seqCustomers.length) return;
-  var tmp = seqCustomers[idx];
-  seqCustomers[idx] = seqCustomers[newIdx];
-  seqCustomers[newIdx] = tmp;
-  seqNormalise();
-  buildSeqPanel();
 }
 
 function seqNormalise() {
