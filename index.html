@@ -2315,26 +2315,28 @@ function renderSequencer() {
   // Find or create sequencer panel in content
   var existing = document.getElementById('seq-panel');
   if (existing) {
-    existing.outerHTML = seqPanelHtml(route, rows);
+    existing.innerHTML = seqPanelInner(route, rows);
   } else {
-    var content = document.getElementById('content');
-    content.insertAdjacentHTML('beforeend', seqPanelHtml(route, rows));
+    var contentEl = document.getElementById('content');
+    var div = document.createElement('div');
+    div.className = 'seq-panel';
+    div.id = 'seq-panel';
+    div.innerHTML = seqPanelInner(route, rows);
+    contentEl.appendChild(div);
   }
   // Scroll to sequencer
   document.getElementById('seq-panel').scrollIntoView({behavior:'smooth'});
 }
 
-function seqPanelHtml(route, rows) {
-  return '<div class="seq-panel" id="seq-panel">'
-    + '<div class="seq-panel-header">'
+function seqPanelInner(route, rows) {
+  return '<div class="seq-panel-header">'
     + '<div><div style="font-weight:700;font-size:14px">Delivery Sequence -- '+esc(route?route.name:'')+'</div>'
-    + '<div style="font-size:12px;color:var(--text-muted);margin-top:2px">Drag to reorder or type a number. Greyed = not delivering today.</div></div>'
+    + '<div style="font-size:12px;color:var(--text-muted);margin-top:2px">Use arrows or type a number. Greyed = not delivering today.</div></div>'
     + '<div style="display:flex;gap:8px">'
     + '<button class="btn btn-outline btn-sm" onclick="closeSeqPanel()">Close</button>'
     + '<button class="btn btn-primary btn-sm" onclick="saveSequence()">Save Order</button>'
     + '</div></div>'
-    + rows
-    + '</div>';
+    + rows;
 }
 
 // Drag and drop
