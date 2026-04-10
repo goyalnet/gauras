@@ -299,8 +299,8 @@
       <div class="fsection">
         <div class="fsection-title">Delivery Settings</div>
         <div class="form-2">
-          <div class="fg"><label class="flabel">Morning Quota (L)</label><input class="fcontrol" id="c-morning" type="number" step="0.5" min="0" placeholder="0"></div>
-          <div class="fg"><label class="flabel">Evening Quota (L)</label><input class="fcontrol" id="c-evening" type="number" step="0.5" min="0" placeholder="0"></div>
+          <div class="fg"><label class="flabel">Morning Quota (L)</label><input class="fcontrol" id="c-morning" type="number" step="1" min="0" placeholder="0"></div>
+          <div class="fg"><label class="flabel">Evening Quota (L)</label><input class="fcontrol" id="c-evening" type="number" step="1" min="0" placeholder="0"></div>
           <div class="fg"><label class="flabel">Bottle Deposit / Bottle (₹)</label><input class="fcontrol" id="c-deposit" type="number" min="0" placeholder="e.g. 50"></div>
           <div class="fg"><label class="flabel">Grace Days</label><input class="fcontrol" id="c-grace" type="number" min="0" placeholder="3"><span class="fhint">Days supply continues after balance = 0</span></div>
           <div class="fg"><label class="flabel">Payment Mode</label><select class="fcontrol" id="c-payment"><option>Cash</option><option>UPI</option><option>Bank Transfer</option></select></div>
@@ -374,7 +374,7 @@
     <div class="mbody">
       <div class="info-box">⚠️ This rate will apply to <strong>all customers</strong> from the date you set. Past deliveries are unaffected.</div>
       <div class="form-1">
-        <div class="fg"><label class="flabel">New Rate per Litre (₹) <span class="req">*</span></label><input class="fcontrol" id="rt-rate" type="number" step="0.5" min="0" placeholder="e.g. 65"></div>
+        <div class="fg"><label class="flabel">New Rate per Litre (₹) <span class="req">*</span></label><input class="fcontrol" id="rt-rate" type="number" step="1" min="0" placeholder="e.g. 65"></div>
         <div class="fg"><label class="flabel">Effective From <span class="req">*</span></label><input class="fcontrol" id="rt-date" type="date"></div>
         <div class="fg"><label class="flabel">Notes / Reason</label><input class="fcontrol" id="rt-notes" placeholder="e.g. Annual revision 2025"></div>
       </div>
@@ -418,12 +418,12 @@
         <div class="form-2" style="gap:13px">
           <div class="fg">
             <label class="flabel">Morning Qty (L) <span class="req">*</span></label>
-            <input class="fcontrol" id="ov-morning" type="number" step="0.5" min="0" placeholder="0">
+            <input class="fcontrol" id="ov-morning" type="number" step="1" min="0" placeholder="0">
             <span class="fhint" id="ov-morning-hint"></span>
           </div>
           <div class="fg">
             <label class="flabel">Evening Qty (L) <span class="req">*</span></label>
-            <input class="fcontrol" id="ov-evening" type="number" step="0.5" min="0" placeholder="0">
+            <input class="fcontrol" id="ov-evening" type="number" step="1" min="0" placeholder="0">
             <span class="fhint" id="ov-evening-hint"></span>
           </div>
         </div>
@@ -2035,7 +2035,7 @@ function renderDelivery() {
       + '<div class="del-card-body '+bodyOpen+'" id="dcb-'+c.id+'">'
       + '<div class="del-qty-row">'
       + '<span class="del-qty-label">Qty Delivered (L)</span>'
-      + '<input class="del-qty-input" type="number" step="0.5" min="0" id="dq-'+c.id+'" value="'+(entry.qty||defaultQty)+'" '+(status==='Not Delivered'?'disabled':'')+' onchange="deliveryEntries['+c.id+'].qty=parseFloat(this.value)||0">'
+      + '<input class="del-qty-input" type="number" step="1" min="0" id="dq-'+c.id+'" value="'+(entry.qty||defaultQty)+'" '+(status==='Not Delivered'?'disabled':'')+' onchange="deliveryEntries['+c.id+'].qty=parseFloat(this.value)||0">'
       + (ov?'<span style="font-size:11px;color:var(--text-muted)">Normal: '+defaultQty+'L</span>':'')
       + '</div>'
       + '<div class="del-qty-row">'
