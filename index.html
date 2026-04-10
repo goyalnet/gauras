@@ -157,6 +157,39 @@
   .alert-banner { border-radius: 8px; padding: 12px 16px; font-size: 13px; display: flex; align-items: flex-start; gap: 10px; margin-bottom: 12px; line-height: 1.5; }
   .alert-banner.warn { background: var(--accent-light); color: #633806; border-left: 3px solid var(--accent); }
   .alert-banner.info { background: var(--brand-light); color: var(--brand-dark); border-left: 3px solid var(--brand); }
+  /* DELIVERY */
+  .del-hero { background: var(--brand-dark); border-radius: var(--radius); padding: 16px 20px; color: #fff; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+  .del-session-btn { padding: 8px 20px; border-radius: 8px; border: 2px solid rgba(255,255,255,0.3); background: transparent; color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.14s; }
+  .del-session-btn.active { background: #fff; color: var(--brand-dark); border-color: #fff; }
+  .del-card { background: var(--surface); border-radius: var(--radius); border: 1px solid var(--border); margin-bottom: 10px; overflow: hidden; transition: all 0.14s; }
+  .del-card:hover { border-color: var(--brand-mid); }
+  .del-card.done { border-color: var(--brand); background: #f5faf8; }
+  .del-card.skipped { border-left: 4px solid var(--text-hint); opacity: 0.7; }
+  .del-card-header { padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .del-name { font-weight: 700; font-size: 14px; }
+  .del-meta { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+  .del-note { font-size: 11px; color: var(--accent); font-style: italic; margin-top: 2px; }
+  .del-status-btns { display: flex; gap: 6px; flex-shrink: 0; }
+  .del-status-btn { padding: 6px 12px; border-radius: 7px; border: 1.5px solid var(--border); background: var(--bg); font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.14s; }
+  .del-status-btn:hover { border-color: var(--brand-mid); }
+  .del-status-btn.sel-delivered { background: var(--brand); color: #fff; border-color: var(--brand); }
+  .del-status-btn.sel-partial { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .del-status-btn.sel-not { background: var(--danger); color: #fff; border-color: var(--danger); }
+  .del-card-body { padding: 0 16px 14px; display: none; }
+  .del-card-body.open { display: block; }
+  .del-qty-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+  .del-qty-label { font-size: 12px; color: var(--text-muted); min-width: 100px; }
+  .del-qty-input { width: 80px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; font-family: inherit; text-align: center; }
+  .del-qty-input:focus { border-color: var(--brand-mid); outline: none; }
+  .del-save-btn { margin-top: 10px; }
+  .del-done-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 20px; background: var(--brand-light); color: var(--brand-dark); }
+  .del-route-select { padding: 10px 16px; border: 1.5px solid var(--border); border-radius: 8px; font-size: 14px; font-family: inherit; color: var(--text); background: var(--surface); outline: none; min-width: 200px; cursor: pointer; }
+  .del-progress { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; margin: 0 0 16px; }
+  .del-progress-fill { height: 100%; background: var(--brand); border-radius: 3px; transition: width 0.3s; }
+  .del-summary { background: var(--brand-light); border-radius: var(--radius); padding: 14px 18px; margin-bottom: 16px; display: flex; gap: 20px; flex-wrap: wrap; }
+  .del-summary-item { font-size: 13px; color: var(--brand-dark); }
+  .del-summary-item strong { font-size: 16px; font-weight: 700; }
+
   /* WALLET */
   .wallet-hero { border-radius: var(--radius); padding: 20px 22px; color: #fff; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
   .wallet-hero.positive { background: var(--brand-dark); }
@@ -548,7 +581,7 @@ const db = {
   del:    (t, id)    => sbFetch(`${t}?id=eq.${id}`, { method:'DELETE', headers:{'Prefer':'return=minimal'} })
 };
 
-let customers = [], routes = [], rates = [], overrides = [], wallets = [], topups = [];
+let customers = [], routes = [], rates = [], overrides = [], wallets = [], topups = [], deliveries = [];
 let editCustId = null, editRouteId = null;
 let srch = '', fStatus = '', fRoute = '';
 let viewDate = new Date().toISOString().split('T')[0];
@@ -563,6 +596,7 @@ async function boot() {
   try { rates     = await db.get('gs_rates',     'order=effective_from.desc'); } catch(e) { rates = []; }
   try { overrides  = await db.get('gs_quantity_overrides', 'order=from_date.asc'); } catch(e) { overrides = []; }
   try { wallets    = await db.get('gs_wallets',  'order=customer_id.asc'); } catch(e) { wallets = []; }
+  try { deliveries = await db.get('gs_deliveries', 'delivery_date=eq.'+todayStr()+'&order=created_at.asc'); } catch(e) { deliveries = []; }
   try { topups     = await db.get('gs_topups',   'order=topup_date.desc'); } catch(e) { topups = []; }
   go('customers');
 }
@@ -578,6 +612,7 @@ function go(page) {
   else if (page === 'routes') renderRoutes();
   else if (page === 'masters') renderMasters();
   else if (page === 'wallet') renderWallet();
+  else if (page === 'delivery') renderDelivery();
   else document.getElementById('content').innerHTML = '<div class="empty"><div class="empty-icon">🚧</div><p>Coming in a future phase.</p></div>';
 }
 
@@ -1876,6 +1911,319 @@ function exportWalletCSV() {
   a.href = URL.createObjectURL(blob);
   a.download = 'gauras-wallets.csv';
   a.click();
+}
+
+// ══════════════════════════════════════
+// DAILY DELIVERY MODULE -- Phase 2C
+// ══════════════════════════════════════
+
+let deliveryRoute = '';
+let deliverySession = 'Morning';
+let deliveryEntries = {}; // custId -> { status, qty, bottles, reason }
+
+function renderDelivery() {
+  const today = todayStr();
+  const todayFmt = fmtDate(today);
+  const dow = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date(today).getDay()];
+
+  // Resume alerts for today
+  const resumingToday = customers.filter(c => c.pause_resume === today && c.pause_from && c.pause_from <= today);
+  const resumeHtml = resumingToday.map(function(c) {
+    return '<div class="alert-banner info">Resuming today: <strong>'+esc(c.first_name)+' '+esc(c.last_name)+'</strong> -- include in route.</div>';
+  }).join('');
+
+  const routeOpts = '<option value="">-- Select Your Route --</option>'
+    + routes.map(function(r) { return '<option value="'+r.id+'"'+(deliveryRoute==r.id?' selected':'')+'>'+esc(r.name)+'</option>'; }).join('');
+
+  if (!deliveryRoute) {
+    document.getElementById('content').innerHTML = resumeHtml
+      + '<div style="max-width:500px;margin:40px auto;text-align:center">'
+      + '<div style="font-size:36px;margin-bottom:16px">🚴</div>'
+      + '<div style="font-size:18px;font-weight:700;margin-bottom:8px">Daily Delivery</div>'
+      + '<div style="font-size:13px;color:var(--text-muted);margin-bottom:24px">'+dow+', '+todayFmt+'</div>'
+      + '<div style="font-size:13px;color:var(--text-muted);margin-bottom:12px">Select your route to begin</div>'
+      + '<select class="del-route-select" onchange="deliveryRoute=this.value;deliveryEntries={};renderDelivery()">'+routeOpts+'</select>'
+      + '</div>';
+    return;
+  }
+
+  const route = routes.find(function(r) { return String(r.id)===String(deliveryRoute); });
+
+  // Get customers for this route, filtered for today's session and schedule
+  let routeCustomers = customers.filter(function(c) {
+    if (String(c.route_id) !== String(deliveryRoute)) return false;
+    if (isOnPause(c, today)) return false;
+    if (!isDeliveryDay(c, today)) return false;
+    if (c.status === 'Stopped') return false;
+    // Filter by session quota
+    if (deliverySession === 'Morning' && !(c.morning_quota > 0)) return false;
+    if (deliverySession === 'Evening' && !(c.evening_quota > 0)) return false;
+    return true;
+  });
+
+  // Pre-initialise entries for new customers
+  routeCustomers.forEach(function(c) {
+    if (!deliveryEntries[c.id]) {
+      var ov = getEffectiveQty(c.id, today);
+      var qty = deliverySession === 'Morning'
+        ? (ov ? ov.morning : (c.morning_quota||0))
+        : (ov ? ov.evening : (c.evening_quota||0));
+      deliveryEntries[c.id] = { status:'', qty:qty, bottles:0, reason:'' };
+    }
+  });
+
+  // Count progress
+  var saved = deliveries.filter(function(d) {
+    return String(d.route_id)===String(deliveryRoute) && d.session===deliverySession && d.delivery_date===today;
+  });
+  var savedIds = saved.map(function(d) { return d.customer_id; });
+  var done = routeCustomers.filter(function(c) { return savedIds.indexOf(c.id)!==-1; }).length;
+  var total = routeCustomers.length;
+  var pct = total > 0 ? Math.round(done/total*100) : 0;
+
+  // Total litres this session
+  var totalLitres = saved.reduce(function(s,d) { return s+(d.qty_delivered||0); }, 0);
+  var totalDeducted = saved.reduce(function(s,d) { return s+(d.amount_deducted||0); }, 0);
+
+  // Build customer cards
+  var cards = routeCustomers.map(function(c) {
+    var entry = deliveryEntries[c.id] || {};
+    var savedEntry = saved.find(function(d) { return d.customer_id===c.id; });
+    var isDone = !!savedEntry;
+    var w = getWallet(c.id);
+    var rate = getRateForDate(today);
+    var ov = getEffectiveQty(c.id, today);
+    var defaultQty = deliverySession==='Morning'
+      ? (ov?ov.morning:(c.morning_quota||0))
+      : (ov?ov.evening:(c.evening_quota||0));
+    var balColor = w.balance>100?'var(--brand)':w.balance>0?'var(--accent)':'var(--danger)';
+
+    if (isDone) {
+      return '<div class="del-card done">'
+        + '<div class="del-card-header">'
+        + '<div><div class="del-name">'+esc(c.first_name)+' '+esc(c.last_name)+'</div>'
+        + '<div class="del-meta">'+esc(c.customer_code||'')+'</div></div>'
+        + '<div style="display:flex;align-items:center;gap:8px">'
+        + '<span class="del-done-badge">Saved: '+savedEntry.qty_delivered+'L '+savedEntry.status+'</span>'
+        + '<button class="btn btn-outline btn-xs" onclick="undoDelivery('+savedEntry.id+','+c.id+')">Undo</button>'
+        + '</div></div></div>';
+    }
+
+    var status = entry.status || '';
+    var selD = status==='Delivered'?'sel-delivered':'';
+    var selP = status==='Partial'?'sel-partial':'';
+    var selN = status==='Not Delivered'?'sel-not':'';
+    var bodyOpen = status ? 'open' : '';
+
+    var reasonOpts = ['Customer not home','Customer refused','Out of stock','Wrong address','Other'].map(function(r) {
+      return '<option value="'+r+'"'+(entry.reason===r?' selected':'')+'>'+r+'</option>';
+    }).join('');
+
+    return '<div class="del-card" id="dc-'+c.id+'">'
+      + '<div class="del-card-header">'
+      + '<div style="flex:1">'
+      + '<div class="del-name">'+esc(c.first_name)+' '+esc(c.last_name)+'</div>'
+      + '<div class="del-meta">'+esc(c.customer_code||'')+' &middot; '+defaultQty+'L &middot; Balance: <span style="color:'+balColor+';font-weight:600">Rs.'+((w.balance||0)).toFixed(0)+'</span></div>'
+      + (c.delivery_notes?'<div class="del-note">'+esc(c.delivery_notes)+'</div>':'')
+      + (ov?'<div style="font-size:10px;color:#0C447C;margin-top:2px">Override qty active</div>':'')
+      + '</div>'
+      + '<div class="del-status-btns">'
+      + '<button class="del-status-btn '+selD+'" onclick="setStatus('+c.id+',\'Delivered\','+defaultQty+')">Delivered</button>'
+      + '<button class="del-status-btn '+selP+'" onclick="setStatus('+c.id+',\'Partial\','+defaultQty+')">Partial</button>'
+      + '<button class="del-status-btn '+selN+'" onclick="setStatus('+c.id+',\'Not Delivered\',0)">Not Delivered</button>'
+      + '</div></div>'
+      + '<div class="del-card-body '+bodyOpen+'" id="dcb-'+c.id+'">'
+      + '<div class="del-qty-row">'
+      + '<span class="del-qty-label">Qty Delivered (L)</span>'
+      + '<input class="del-qty-input" type="number" step="0.5" min="0" id="dq-'+c.id+'" value="'+(entry.qty||defaultQty)+'" '+(status==='Not Delivered'?'disabled':'')+' onchange="deliveryEntries['+c.id+'].qty=parseFloat(this.value)||0">'
+      + (ov?'<span style="font-size:11px;color:var(--text-muted)">Normal: '+defaultQty+'L</span>':'')
+      + '</div>'
+      + '<div class="del-qty-row">'
+      + '<span class="del-qty-label">Empty Bottles</span>'
+      + '<input class="del-qty-input" type="number" step="1" min="0" id="db-'+c.id+'" value="'+(entry.bottles||0)+'" onchange="deliveryEntries['+c.id+'].bottles=parseInt(this.value)||0">'
+      + '</div>'
+      + (status==='Not Delivered'?'<div class="del-qty-row"><span class="del-qty-label">Reason</span><select style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:inherit" onchange="deliveryEntries['+c.id+'].reason=this.value"><option value="">Select reason</option>'+reasonOpts+'</select></div>':'')
+      + '<button class="btn btn-primary btn-sm del-save-btn" onclick="saveDeliveryEntry('+c.id+')">Save Entry</button>'
+      + '</div></div>';
+  }).join('');
+
+  var emptyMsg = routeCustomers.length===0
+    ? '<div class="empty"><div class="empty-icon">🚴</div><p>No customers scheduled for '+deliverySession+' delivery on this route today.</p></div>'
+    : '';
+
+  var html = resumeHtml;
+  html += '<div class="del-hero">';
+  html += '<div><div style="font-size:12px;opacity:0.7;margin-bottom:4px">'+dow+', '+todayFmt+'</div>';
+  html += '<div style="font-size:18px;font-weight:700">'+esc(route?route.name:'')+'</div>';
+  html += '<div style="font-size:13px;opacity:0.75;margin-top:2px">'+done+' of '+total+' done &middot; '+totalLitres.toFixed(1)+'L delivered &middot; Rs.'+totalDeducted.toFixed(0)+' deducted</div></div>';
+  html += '<div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end">';
+  html += '<div style="display:flex;gap:6px">';
+  html += '<button class="del-session-btn'+(deliverySession==='Morning'?' active':'')+'" onclick="deliverySession=\'Morning\';renderDelivery()">Morning</button>';
+  html += '<button class="del-session-btn'+(deliverySession==='Evening'?' active':'')+'" onclick="deliverySession=\'Evening\';renderDelivery()">Evening</button>';
+  html += '</div>';
+  html += '<select class="del-route-select" style="font-size:12px;padding:6px 10px;color:#fff;background:rgba(255,255,255,0.15);border-color:rgba(255,255,255,0.3)" onchange="deliveryRoute=this.value;deliveryEntries={};renderDelivery()">'+routeOpts+'</select>';
+  html += '</div></div>';
+
+  if (total > 0) {
+    html += '<div class="del-progress"><div class="del-progress-fill" style="width:'+pct+'%"></div></div>';
+  }
+
+  if (done > 0) {
+    html += '<div class="del-summary">';
+    html += '<div class="del-summary-item"><strong>'+done+'</strong> saved</div>';
+    html += '<div class="del-summary-item"><strong>'+totalLitres.toFixed(1)+'L</strong> delivered</div>';
+    html += '<div class="del-summary-item"><strong>Rs.'+totalDeducted.toFixed(0)+'</strong> deducted</div>';
+    html += '<div class="del-summary-item"><strong>'+(total-done)+'</strong> remaining</div>';
+    html += '</div>';
+  }
+
+  html += cards + emptyMsg;
+
+  if (total > 0 && done < total) {
+    html += '<div style="text-align:center;padding:20px">';
+    html += '<button class="btn btn-primary" onclick="submitAllRoute()" style="padding:12px 32px;font-size:15px">Submit Entire Route</button>';
+    html += '</div>';
+  } else if (total > 0 && done === total) {
+    html += '<div style="text-align:center;padding:20px;color:var(--brand);font-weight:700;font-size:15px">Route complete! All entries saved.</div>';
+  }
+
+  document.getElementById('content').innerHTML = html;
+}
+
+function setStatus(custId, status, defaultQty) {
+  if (!deliveryEntries[custId]) deliveryEntries[custId] = { status:'', qty:defaultQty, bottles:0, reason:'' };
+  deliveryEntries[custId].status = status;
+  if (status === 'Delivered') deliveryEntries[custId].qty = defaultQty;
+  if (status === 'Not Delivered') deliveryEntries[custId].qty = 0;
+  renderDelivery();
+}
+
+async function saveDeliveryEntry(custId) {
+  const entry = deliveryEntries[custId];
+  if (!entry || !entry.status) return toast('Please select a delivery status first', 'error');
+  if (entry.status === 'Partial' && (!entry.qty || entry.qty <= 0)) return toast('Please enter quantity for partial delivery', 'error');
+  if (entry.status === 'Not Delivered' && !entry.reason) return toast('Please select a reason for non-delivery', 'error');
+
+  const today = todayStr();
+  const rate = getRateForDate(today);
+  const qtyDelivered = entry.status === 'Not Delivered' ? 0 : (entry.qty || 0);
+  const amountDeducted = qtyDelivered * rate;
+  const c = customers.find(function(x) { return x.id === custId; });
+  if (!c) return;
+
+  const data = {
+    customer_id: custId,
+    route_id: deliveryRoute,
+    delivery_date: today,
+    session: deliverySession,
+    status: entry.status,
+    qty_delivered: qtyDelivered,
+    qty_expected: deliverySession==='Morning' ? (c.morning_quota||0) : (c.evening_quota||0),
+    empty_bottles: entry.bottles || 0,
+    reason: entry.reason || null,
+    amount_deducted: amountDeducted,
+    rate_applied: rate
+  };
+
+  try {
+    const res = await db.insert('gs_deliveries', data);
+    deliveries.push(res[0]);
+
+    // Deduct from wallet
+    if (amountDeducted > 0) {
+      await deductFromWallet(custId, amountDeducted);
+    }
+
+    toast(esc(c.first_name)+' saved -- Rs.'+amountDeducted.toFixed(0)+' deducted', 'success');
+    renderDelivery();
+  } catch(e) { toast('Error: '+e.message, 'error'); }
+}
+
+async function deductFromWallet(custId, amount) {
+  const w = wallets.find(function(x) { return String(x.customer_id)===String(custId); });
+  const c = customers.find(function(x) { return x.id === custId; });
+  if (!c) return;
+
+  if (w) {
+    const newBal = (w.balance||0) - amount;
+    await db.update('gs_wallets', w.id, { balance: newBal, updated_at: new Date().toISOString() });
+    w.balance = newBal;
+
+    // Check grace / stop
+    if (newBal <= 0 && c.status === 'Active') {
+      const graceDays = c.grace_days || 3;
+      if (graceDays > 0) {
+        await db.update('gs_customers', custId, { status: 'Grace' });
+        const ci = customers.findIndex(function(x) { return x.id===custId; });
+        if (ci!==-1) customers[ci].status = 'Grace';
+        toast(esc(c.first_name)+' balance = 0 -- Grace period started', 'info');
+      } else {
+        await db.update('gs_customers', custId, { status: 'Stopped' });
+        const ci = customers.findIndex(function(x) { return x.id===custId; });
+        if (ci!==-1) customers[ci].status = 'Stopped';
+        toast(esc(c.first_name)+' -- Supply stopped (no grace days)', 'error');
+      }
+    } else if (newBal <= 0 && c.status === 'Grace') {
+      // Check if grace is exhausted -- count grace deliveries
+      const graceDeliveries = deliveries.filter(function(d) {
+        return String(d.customer_id)===String(custId) && d.status !== 'Not Delivered';
+      });
+      if (graceDeliveries.length >= (c.grace_days||3)) {
+        await db.update('gs_customers', custId, { status: 'Stopped' });
+        const ci = customers.findIndex(function(x) { return x.id===custId; });
+        if (ci!==-1) customers[ci].status = 'Stopped';
+        toast(esc(c.first_name)+' -- Grace exhausted, supply stopped!', 'error');
+      }
+    }
+  } else {
+    // No wallet yet -- create with negative balance
+    const wRes = await db.insert('gs_wallets', { customer_id:custId, balance:-amount, updated_at:new Date().toISOString() });
+    if (wRes[0]) wallets.push(wRes[0]);
+  }
+}
+
+async function undoDelivery(deliveryId, custId) {
+  const d = deliveries.find(function(x) { return x.id===deliveryId; });
+  if (!d) return;
+  if (!confirm('Undo this delivery entry? Rs.'+d.amount_deducted+' will be refunded to wallet.')) return;
+  try {
+    await db.del('gs_deliveries', deliveryId);
+    deliveries = deliveries.filter(function(x) { return x.id!==deliveryId; });
+    // Refund wallet
+    const w = wallets.find(function(x) { return String(x.customer_id)===String(custId); });
+    if (w && d.amount_deducted > 0) {
+      const newBal = (w.balance||0) + d.amount_deducted;
+      await db.update('gs_wallets', w.id, { balance:newBal });
+      w.balance = newBal;
+      // Revert grace/stopped status if balance is positive again
+      const c = customers.find(function(x) { return x.id===custId; });
+      if (c && (c.status==='Grace'||c.status==='Stopped') && newBal > 0) {
+        await db.update('gs_customers', custId, { status:'Active' });
+        const ci = customers.findIndex(function(x) { return x.id===custId; });
+        if (ci!==-1) customers[ci].status = 'Active';
+      }
+    }
+    delete deliveryEntries[custId];
+    toast('Delivery undone -- Rs.'+(d.amount_deducted||0).toFixed(0)+' refunded', 'success');
+    renderDelivery();
+  } catch(e) { toast('Error: '+e.message, 'error'); }
+}
+
+async function submitAllRoute() {
+  const today = todayStr();
+  const pending = Object.keys(deliveryEntries).filter(function(custId) {
+    const saved = deliveries.find(function(d) {
+      return String(d.customer_id)===String(custId) && d.session===deliverySession && d.delivery_date===today;
+    });
+    return !saved && deliveryEntries[custId].status;
+  });
+
+  if (pending.length === 0) return toast('No pending entries to submit', 'error');
+
+  for (var i=0; i<pending.length; i++) {
+    await saveDeliveryEntry(parseInt(pending[i]));
+  }
+  toast('Route submitted -- all entries saved!', 'success');
 }
 
 // ── HELPERS ──
