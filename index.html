@@ -1,0 +1,1909 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GauRas — Milk Distribution</title>
+<style>
+  :root {
+    --brand: #0F6E56;
+    --brand-light: #E1F5EE;
+    --brand-mid: #1D9E75;
+    --brand-dark: #085041;
+    --accent: #BA7517;
+    --accent-light: #FAEEDA;
+    --danger: #A32D2D;
+    --danger-light: #FCEBEB;
+    --bg: #f4f7f6;
+    --surface: #ffffff;
+    --border: #d4ddd9;
+    --text: #1a2e28;
+    --text-muted: #5a7a70;
+    --text-hint: #8aaa9f;
+    --sidebar-w: 224px;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); font-size: 14px; }
+  .app { display: flex; height: 100vh; overflow: hidden; }
+  .sidebar { width: var(--sidebar-w); background: var(--brand-dark); display: flex; flex-direction: column; flex-shrink: 0; overflow-y: auto; }
+  .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  .topbar { height: 54px; background: var(--surface); border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 20px; gap: 12px; flex-shrink: 0; }
+  .content { flex: 1; overflow-y: auto; padding: 20px; }
+  .sidebar-logo { padding: 18px 16px 14px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+  .logo-name { color: #fff; font-size: 20px; font-weight: 700; }
+  .logo-sub { color: rgba(255,255,255,0.45); font-size: 11px; margin-top: 2px; }
+  .nav-group { padding: 8px 0; }
+  .nav-label { color: rgba(255,255,255,0.3); font-size: 10px; text-transform: uppercase; letter-spacing: 0.8px; padding: 8px 16px 3px; }
+  .nav-item { display: flex; align-items: center; gap: 9px; padding: 9px 16px; color: rgba(255,255,255,0.62); cursor: pointer; font-size: 13px; border-left: 3px solid transparent; transition: all 0.14s; }
+  .nav-item:hover { background: rgba(255,255,255,0.07); color: #fff; }
+  .nav-item.active { background: rgba(255,255,255,0.11); color: #fff; border-left-color: #5DCAA5; }
+  .page-title { font-size: 15px; font-weight: 600; flex: 1; }
+  .role-badge { background: var(--brand-light); color: var(--brand-dark); font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 20px; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; border: none; transition: all 0.14s; white-space: nowrap; font-family: inherit; }
+  .btn-primary { background: var(--brand); color: #fff; }
+  .btn-primary:hover { background: var(--brand-mid); }
+  .btn-outline { background: #fff; color: var(--text); border: 1px solid var(--border); }
+  .btn-outline:hover { background: var(--bg); }
+  .btn-danger { background: var(--danger-light); color: var(--danger); }
+  .btn-danger:hover { background: #f7c1c1; }
+  .btn-sm { padding: 5px 10px; font-size: 12px; }
+  .btn-xs { padding: 4px 8px; font-size: 11px; border-radius: 6px; }
+  .card { background: var(--surface); border-radius: var(--radius); border: 1px solid var(--border); }
+  .card-header { padding: 13px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .card-title { font-weight: 600; font-size: 14px; }
+  .card-body { padding: 18px; }
+  .stats-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom: 18px; }
+  .stat-card { background: var(--surface); border-radius: var(--radius); border: 1px solid var(--border); padding: 14px 16px; }
+  .stat-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px; }
+  .stat-value { font-size: 26px; font-weight: 700; line-height: 1; }
+  .stat-sub { font-size: 11px; color: var(--text-hint); margin-top: 3px; }
+  .c-green .stat-value { color: var(--brand); }
+  .c-amber .stat-value { color: var(--accent); }
+  .c-red .stat-value { color: var(--danger); }
+  .toolbar { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .search-wrap { flex: 1; min-width: 180px; position: relative; }
+  .search-wrap input { width: 100%; padding: 7px 11px 7px 32px; border: 1px solid var(--border); border-radius: 7px; font-size: 13px; background: var(--bg); color: var(--text); outline: none; font-family: inherit; }
+  .search-wrap input:focus { border-color: var(--brand-mid); background: #fff; }
+  .search-wrap .si { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 13px; color: var(--text-hint); }
+  select.flt { padding: 7px 11px; border: 1px solid var(--border); border-radius: 7px; font-size: 13px; background: var(--bg); color: var(--text); outline: none; cursor: pointer; font-family: inherit; }
+  .tbl-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th { background: var(--bg); padding: 9px 12px; text-align: left; font-weight: 600; color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  tbody tr { border-bottom: 1px solid #eef2f0; transition: background 0.1s; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: #f5faf8; }
+  td { padding: 10px 12px; vertical-align: middle; }
+  .td-primary { font-weight: 500; }
+  .td-sub { font-size: 11px; color: var(--text-hint); margin-top: 2px; }
+  .td-code { font-size: 11px; font-family: monospace; color: var(--text-muted); background: var(--bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border); }
+  .badge { display: inline-flex; align-items: center; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 20px; white-space: nowrap; }
+  .badge-Active  { background: #E1F5EE; color: #085041; }
+  .badge-Grace   { background: #FAEEDA; color: #633806; }
+  .badge-Stopped { background: #FCEBEB; color: #791F1F; }
+  .badge-Paused  { background: #f0f3f2; color: #4a5e58; }
+  .badge-route   { background: var(--brand-light); color: var(--brand-dark); }
+  .pager { display: flex; align-items: center; justify-content: space-between; padding: 11px 16px; border-top: 1px solid var(--border); }
+  .pager-info { font-size: 12px; color: var(--text-muted); }
+  .backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.38); z-index: 100; align-items: center; justify-content: center; padding: 16px; }
+  .backdrop.open { display: flex; }
+  .modal { background: var(--surface); border-radius: 14px; width: 640px; max-width: 100%; max-height: 92vh; overflow-y: auto; box-shadow: 0 10px 40px rgba(0,0,0,0.18); }
+  .modal-sm { width: 440px; }
+  .mhead { padding: 17px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; background: var(--surface); z-index: 2; }
+  .mtitle { font-size: 16px; font-weight: 700; }
+  .mclose { background: none; border: none; font-size: 22px; cursor: pointer; color: var(--text-hint); line-height: 1; padding: 0 6px; border-radius: 4px; }
+  .mclose:hover { background: var(--bg); color: var(--text); }
+  .mbody { padding: 20px; }
+  .mfooter { padding: 14px 20px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; }
+  .form-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; }
+  .form-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 13px; }
+  .form-1 { display: grid; grid-template-columns: 1fr; gap: 13px; }
+  .fg { display: flex; flex-direction: column; gap: 5px; }
+  .fg.s2 { grid-column: span 2; }
+  .fg.s3 { grid-column: span 3; }
+  .flabel { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.4px; }
+  .req { color: var(--danger); }
+  .fcontrol { padding: 8px 11px; border: 1px solid var(--border); border-radius: 7px; font-size: 13px; color: var(--text); background: var(--surface); outline: none; transition: border 0.14s; font-family: inherit; }
+  .fcontrol:focus { border-color: var(--brand-mid); box-shadow: 0 0 0 3px rgba(29,158,117,0.1); }
+  select.fcontrol { cursor: pointer; }
+  textarea.fcontrol { resize: vertical; }
+  .fhint { font-size: 11px; color: var(--text-hint); }
+  .fsection { margin-bottom: 20px; }
+  .fsection-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.7px; color: var(--brand); margin-bottom: 12px; padding-bottom: 7px; border-bottom: 1px solid var(--brand-light); }
+  .route-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; }
+  .route-card { background: var(--surface); border-radius: var(--radius); border: 1px solid var(--border); padding: 16px; transition: all 0.14s; }
+  .route-card:hover { border-color: var(--brand-mid); box-shadow: 0 2px 12px rgba(15,110,86,0.1); }
+  .rc-name { font-weight: 700; font-size: 15px; margin-bottom: 3px; }
+  .rc-meta { font-size: 12px; color: var(--text-muted); display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+  .rc-bar { margin-top: 10px; height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
+  .rc-bar-fill { height: 100%; background: var(--brand); border-radius: 2px; }
+  .rate-hero { background: var(--brand-dark); border-radius: var(--radius); padding: 24px; color: #fff; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
+  .rate-hero-label { font-size: 12px; opacity: 0.65; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .rate-hero-value { font-size: 44px; font-weight: 700; letter-spacing: -1px; }
+  .rate-hero-sub { font-size: 13px; opacity: 0.7; margin-top: 2px; }
+  .rate-tbl th { padding: 9px 14px; text-align: left; font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); background: var(--bg); }
+  .rate-tbl td { padding: 11px 14px; border-bottom: 1px solid #eef2f0; }
+  .rate-tbl tr:last-child td { border-bottom: none; }
+  .cur-rate-row td { background: #f0faf5; }
+  .tabs { display: flex; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
+  .tab { padding: 10px 16px; font-size: 13px; font-weight: 500; color: var(--text-muted); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .tab.active { color: var(--brand); border-bottom-color: var(--brand); }
+  .empty { text-align: center; padding: 48px 20px; color: var(--text-muted); }
+  .empty-icon { font-size: 36px; margin-bottom: 10px; }
+  .empty p { font-size: 13px; }
+  .confirm-box { background: var(--surface); border-radius: 14px; width: 360px; max-width: 95vw; padding: 24px; box-shadow: 0 10px 40px rgba(0,0,0,0.18); }
+  .confirm-title { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+  .confirm-msg { font-size: 13px; color: var(--text-muted); margin-bottom: 20px; line-height: 1.55; }
+  .confirm-btns { display: flex; justify-content: flex-end; gap: 10px; }
+  .toasts { position: fixed; top: 18px; right: 18px; z-index: 300; display: flex; flex-direction: column; gap: 8px; }
+  .toast { padding: 10px 16px; border-radius: 8px; font-size: 13px; display: flex; align-items: center; gap: 8px; min-width: 210px; animation: tIn 0.2s ease; box-shadow: 0 4px 16px rgba(0,0,0,0.15); }
+  .toast-success { background: var(--brand-dark); color: #fff; }
+  .toast-error   { background: var(--danger); color: #fff; }
+  .toast-info    { background: var(--text); color: #fff; }
+  @keyframes tIn { from { opacity:0; transform:translateX(16px); } to { opacity:1; transform:none; } }
+  .acts { display: flex; gap: 5px; }
+  .info-box { background: var(--accent-light); border-radius: 8px; padding: 12px 14px; font-size: 13px; color: #633806; line-height: 1.55; margin-bottom: 18px; }
+  /* DAY PICKER */
+  .day-picker { display: flex; gap: 6px; flex-wrap: wrap; }
+  .day-btn { width: 36px; height: 36px; border-radius: 50%; border: 1.5px solid var(--border); background: var(--bg); color: var(--text-muted); font-size: 12px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.14s; user-select: none; }
+  .day-btn:hover { border-color: var(--brand-mid); color: var(--brand); }
+  .day-btn.on { background: var(--brand); border-color: var(--brand); color: #fff; }
+  /* PAUSE BANNER */
+  .pause-banner { background: #f0f3f2; border-radius: 8px; padding: 10px 14px; font-size: 12px; color: var(--text-muted); display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  .pause-banner.active-pause { background: var(--accent-light); color: #633806; }
+  /* SCHEDULE PILL */
+  .sched-pill { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 20px; background: #E6F1FB; color: #0C447C; }
+  /* RESUME ALERT */
+  .alert-banner { border-radius: 8px; padding: 12px 16px; font-size: 13px; display: flex; align-items: flex-start; gap: 10px; margin-bottom: 12px; line-height: 1.5; }
+  .alert-banner.warn { background: var(--accent-light); color: #633806; border-left: 3px solid var(--accent); }
+  .alert-banner.info { background: var(--brand-light); color: var(--brand-dark); border-left: 3px solid var(--brand); }
+  /* WALLET */
+  .wallet-hero { border-radius: var(--radius); padding: 20px 22px; color: #fff; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+  .wallet-hero.positive { background: var(--brand-dark); }
+  .wallet-hero.low { background: var(--accent); }
+  .wallet-hero.zero { background: var(--danger); }
+  .wallet-bal { font-size: 36px; font-weight: 700; letter-spacing: -1px; line-height: 1; }
+  .wallet-label { font-size: 11px; opacity: 0.7; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+  .wallet-sub { font-size: 12px; opacity: 0.75; margin-top: 4px; }
+  .wallet-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-bottom: 18px; }
+  .wallet-stat { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 13px 16px; }
+  .wallet-stat-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+  .wallet-stat-val { font-size: 20px; font-weight: 700; }
+  .topup-row { display: flex; align-items: center; gap: 12px; padding: 11px 16px; border-bottom: 1px solid #eef2f0; }
+  .topup-row:last-child { border-bottom: none; }
+  .topup-icon { width: 34px; height: 34px; border-radius: 50%; background: var(--brand-light); color: var(--brand); display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+  .topup-info { flex: 1; min-width: 0; }
+  .topup-amount { font-size: 15px; font-weight: 700; color: var(--brand); }
+  .topup-meta { font-size: 11px; color: var(--text-hint); margin-top: 2px; }
+  .mode-badge { display: inline-flex; align-items: center; font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 20px; background: var(--brand-light); color: var(--brand-dark); }
+  .days-pill { display: inline-flex; align-items: center; font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 20px; }
+  .days-pill.good { background: var(--brand-light); color: var(--brand-dark); }
+  .days-pill.low  { background: var(--accent-light); color: #633806; }
+  .days-pill.zero { background: var(--danger-light); color: var(--danger); }
+  .wlt-search { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+
+  @media (max-width: 768px) {
+    .sidebar { display: none; }
+    .stats-grid { grid-template-columns: 1fr 1fr 1fr; }
+    .form-2, .form-3 { grid-template-columns: 1fr; }
+    .fg.s2, .fg.s3 { grid-column: span 1; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-name">🥛 GauRas</div>
+      <div class="logo-sub">Milk Distribution</div>
+    </div>
+    <div class="nav-group">
+      <div class="nav-label">Main</div>
+      <div class="nav-item" onclick="go('dashboard')"><span>📊</span> Dashboard</div>
+      <div class="nav-item" onclick="go('customers')"><span>👥</span> Customers</div>
+      <div class="nav-item" onclick="go('routes')"><span>🗺️</span> Routes</div>
+    </div>
+    <div class="nav-group">
+      <div class="nav-label">Operations</div>
+      <div class="nav-item" onclick="go('delivery')"><span>🚴</span> Daily Delivery</div>
+      <div class="nav-item" onclick="go('wallet')"><span>💰</span> Wallet & Payments</div>
+      <div class="nav-item" onclick="go('bottles')"><span>🍼</span> Bottle Tracking</div>
+    </div>
+    <div class="nav-group">
+      <div class="nav-label">Reports</div>
+      <div class="nav-item" onclick="go('reports')"><span>📋</span> Reports</div>
+      <div class="nav-item" onclick="go('alerts')"><span>🔔</span> Alerts</div>
+    </div>
+    <div class="nav-group">
+      <div class="nav-label">Configuration</div>
+      <div class="nav-item" onclick="go('masters')"><span>⚙️</span> Masters</div>
+    </div>
+  </aside>
+  <div class="main">
+    <header class="topbar">
+      <div class="page-title" id="page-title">Customers</div>
+      <span class="role-badge">Admin</span>
+    </header>
+    <div class="content" id="content"></div>
+  </div>
+</div>
+
+<div class="toasts" id="toasts"></div>
+
+<!-- CUSTOMER MODAL -->
+<div class="backdrop" id="cust-modal">
+  <div class="modal">
+    <div class="mhead">
+      <div class="mtitle" id="cust-modal-title">Add Customer</div>
+      <button class="mclose" onclick="closeM('cust-modal')">×</button>
+    </div>
+    <div class="mbody">
+      <div class="fsection">
+        <div class="fsection-title">Identity</div>
+        <div class="form-3">
+          <div class="fg"><label class="flabel">Customer Code <span class="req">*</span></label><input class="fcontrol" id="c-code" placeholder="e.g. GR-001"></div>
+          <div class="fg"><label class="flabel">First Name <span class="req">*</span></label><input class="fcontrol" id="c-fname" placeholder="First name"></div>
+          <div class="fg"><label class="flabel">Last Name <span class="req">*</span></label><input class="fcontrol" id="c-lname" placeholder="Last name"></div>
+          <div class="fg"><label class="flabel">Phone <span class="req">*</span></label><input class="fcontrol" id="c-phone" placeholder="10-digit mobile" oninput="checkDupPhone(this)"><span class="fhint" id="phone-dup-warn" style="color:var(--danger);display:none">⚠ This phone number is already used by another customer</span></div>
+          <div class="fg"><label class="flabel">WhatsApp</label><input class="fcontrol" id="c-wa" placeholder="If different from phone"></div>
+          <div class="fg"><label class="flabel">Route <span class="req">*</span></label><select class="fcontrol" id="c-route"><option value="">— Select Route —</option></select></div>
+          <div class="fg"><label class="flabel">Joining Date</label><input class="fcontrol" id="c-joined" type="date"><span class="fhint">Date customer started receiving supply</span></div>
+          <div class="fg"><label class="flabel">Opening Balance (Rs.)</label><input class="fcontrol" id="c-opening-bal" type="number" min="0" step="1" placeholder="0"><span class="fhint">Initial wallet credit on joining</span></div>
+        </div>
+      </div>
+      <div class="fsection">
+        <div class="fsection-title">Address</div>
+        <div class="form-2">
+          <div class="fg"><label class="flabel">Building Name</label><input class="fcontrol" id="c-building" placeholder="Society / building name"></div>
+          <div class="fg"><label class="flabel">Flat No</label><input class="fcontrol" id="c-flat" placeholder="e.g. A-204"></div>
+          <div class="fg"><label class="flabel">Floor</label><input class="fcontrol" id="c-floor" placeholder="e.g. 2nd Floor"></div>
+          <div class="fg"><label class="flabel">Street / Area</label><input class="fcontrol" id="c-street" placeholder="Street or area name"></div>
+          <div class="fg"><label class="flabel">City</label><input class="fcontrol" id="c-city" placeholder="City"></div>
+          <div class="fg"><label class="flabel">PIN Code</label><input class="fcontrol" id="c-pin" placeholder="6-digit PIN"></div>
+          <div class="fg s2"><label class="flabel">State</label><input class="fcontrol" id="c-state" placeholder="State"></div>
+        </div>
+      </div>
+      <div class="fsection">
+        <div class="fsection-title">Delivery Settings</div>
+        <div class="form-2">
+          <div class="fg"><label class="flabel">Morning Quota (L)</label><input class="fcontrol" id="c-morning" type="number" step="0.5" min="0" placeholder="0"></div>
+          <div class="fg"><label class="flabel">Evening Quota (L)</label><input class="fcontrol" id="c-evening" type="number" step="0.5" min="0" placeholder="0"></div>
+          <div class="fg"><label class="flabel">Bottle Deposit / Bottle (₹)</label><input class="fcontrol" id="c-deposit" type="number" min="0" placeholder="e.g. 50"></div>
+          <div class="fg"><label class="flabel">Grace Days</label><input class="fcontrol" id="c-grace" type="number" min="0" placeholder="3"><span class="fhint">Days supply continues after balance = 0</span></div>
+          <div class="fg"><label class="flabel">Payment Mode</label><select class="fcontrol" id="c-payment"><option>Cash</option><option>UPI</option><option>Bank Transfer</option></select></div>
+          <div class="fg"><label class="flabel">Status</label><select class="fcontrol" id="c-status"><option>Active</option><option>Paused</option><option>Grace</option><option>Stopped</option></select></div>
+          <div class="fg s2"><label class="flabel">Delivery Notes</label><textarea class="fcontrol" id="c-notes" rows="2" placeholder="e.g. Leave at gate, call before delivery, 2nd floor left"></textarea></div>
+        </div>
+      </div>
+      <div class="fsection">
+        <div class="fsection-title">Delivery Schedule</div>
+        <div class="form-1">
+          <div class="fg">
+            <label class="flabel">Frequency</label>
+            <select class="fcontrol" id="c-sched-type" onchange="toggleDayPicker()">
+              <option value="Daily">Daily — deliver every day</option>
+              <option value="Custom">Custom — select specific days</option>
+            </select>
+          </div>
+          <div class="fg" id="day-picker-wrap" style="display:none">
+            <label class="flabel">Delivery Days</label>
+            <div class="day-picker">
+              <div class="day-btn" data-day="0" onclick="toggleDay(this)">Su</div>
+              <div class="day-btn" data-day="1" onclick="toggleDay(this)">Mo</div>
+              <div class="day-btn" data-day="2" onclick="toggleDay(this)">Tu</div>
+              <div class="day-btn" data-day="3" onclick="toggleDay(this)">We</div>
+              <div class="day-btn" data-day="4" onclick="toggleDay(this)">Th</div>
+              <div class="day-btn" data-day="5" onclick="toggleDay(this)">Fr</div>
+              <div class="day-btn" data-day="6" onclick="toggleDay(this)">Sa</div>
+            </div>
+            <span class="fhint">Click days to toggle. At least one day required.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="mfooter">
+      <button class="btn btn-outline" onclick="closeM('cust-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveCustomer()">💾 Save Customer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ROUTE MODAL -->
+<div class="backdrop" id="route-modal">
+  <div class="modal modal-sm">
+    <div class="mhead">
+      <div class="mtitle" id="route-modal-title">Add Route</div>
+      <button class="mclose" onclick="closeM('route-modal')">×</button>
+    </div>
+    <div class="mbody">
+      <div class="form-1">
+        <div class="fg"><label class="flabel">Route Name <span class="req">*</span></label><input class="fcontrol" id="r-name" placeholder="e.g. Sector 4 Morning"></div>
+        <div class="fg"><label class="flabel">Area / Zone</label><input class="fcontrol" id="r-area" placeholder="e.g. Sector 4"></div>
+        <div class="fg"><label class="flabel">Milkman Name</label><input class="fcontrol" id="r-milkman" placeholder="Assigned milkman"></div>
+        <div class="fg"><label class="flabel">Delivery Time</label><select class="fcontrol" id="r-time"><option>Morning</option><option>Evening</option><option>Both</option></select></div>
+        <div class="fg"><label class="flabel">Notes</label><textarea class="fcontrol" id="r-notes" rows="2" placeholder="Any notes…"></textarea></div>
+      </div>
+    </div>
+    <div class="mfooter">
+      <button class="btn btn-outline" onclick="closeM('route-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveRoute()">💾 Save Route</button>
+    </div>
+  </div>
+</div>
+
+<!-- RATE MODAL -->
+<div class="backdrop" id="rate-modal">
+  <div class="modal modal-sm">
+    <div class="mhead">
+      <div class="mtitle">Set New Rate</div>
+      <button class="mclose" onclick="closeM('rate-modal')">×</button>
+    </div>
+    <div class="mbody">
+      <div class="info-box">⚠️ This rate will apply to <strong>all customers</strong> from the date you set. Past deliveries are unaffected.</div>
+      <div class="form-1">
+        <div class="fg"><label class="flabel">New Rate per Litre (₹) <span class="req">*</span></label><input class="fcontrol" id="rt-rate" type="number" step="0.5" min="0" placeholder="e.g. 65"></div>
+        <div class="fg"><label class="flabel">Effective From <span class="req">*</span></label><input class="fcontrol" id="rt-date" type="date"></div>
+        <div class="fg"><label class="flabel">Notes / Reason</label><input class="fcontrol" id="rt-notes" placeholder="e.g. Annual revision 2025"></div>
+      </div>
+    </div>
+    <div class="mfooter">
+      <button class="btn btn-outline" onclick="closeM('rate-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveRate()">💾 Save Rate</button>
+    </div>
+  </div>
+</div>
+
+<!-- OVERRIDE MODAL -->
+<div class="backdrop" id="override-modal">
+  <div class="modal modal-sm">
+    <div class="mhead">
+      <div class="mtitle" id="ov-modal-title">Temporary Qty. Change</div>
+      <button class="mclose" onclick="closeM('override-modal')">×</button>
+    </div>
+    <div class="mbody">
+      <div class="info-box" id="ov-customer-info" style="margin-bottom:16px"></div>
+      <div class="form-1">
+        <div class="fg">
+          <label class="flabel">Override Type</label>
+          <select class="fcontrol" id="ov-type" onchange="toggleOvType()">
+            <option value="single">Single Date</option>
+            <option value="range">Date Range</option>
+          </select>
+        </div>
+        <div class="fg" id="ov-date-single">
+          <label class="flabel">Date <span class="req">*</span></label>
+          <input class="fcontrol" id="ov-date" type="date">
+        </div>
+        <div class="fg" style="display:none" id="ov-date-from-wrap">
+          <label class="flabel">From Date <span class="req">*</span></label>
+          <input class="fcontrol" id="ov-from" type="date">
+        </div>
+        <div class="fg" style="display:none" id="ov-date-to-wrap">
+          <label class="flabel">To Date <span class="req">*</span></label>
+          <input class="fcontrol" id="ov-to" type="date">
+        </div>
+        <div class="form-2" style="gap:13px">
+          <div class="fg">
+            <label class="flabel">Morning Qty (L) <span class="req">*</span></label>
+            <input class="fcontrol" id="ov-morning" type="number" step="0.5" min="0" placeholder="0">
+            <span class="fhint" id="ov-morning-hint"></span>
+          </div>
+          <div class="fg">
+            <label class="flabel">Evening Qty (L) <span class="req">*</span></label>
+            <input class="fcontrol" id="ov-evening" type="number" step="0.5" min="0" placeholder="0">
+            <span class="fhint" id="ov-evening-hint"></span>
+          </div>
+        </div>
+        <div class="fg">
+          <label class="flabel">Reason / Note</label>
+          <input class="fcontrol" id="ov-reason" placeholder="e.g. Festival, guest, travel">
+        </div>
+      </div>
+    </div>
+    <div class="mfooter">
+      <button class="btn btn-outline" onclick="closeM('override-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveOverride()">💾 Save Override</button>
+    </div>
+  </div>
+</div>
+
+<!-- PAUSE MODAL -->
+<div class="backdrop" id="pause-modal">
+  <div class="modal modal-sm">
+    <div class="mhead">
+      <div class="mtitle" id="pause-modal-title">Temporary Pause / Hold</div>
+      <button class="mclose" onclick="closeM('pause-modal')">×</button>
+    </div>
+    <div class="mbody">
+      <div class="info-box" id="pause-customer-info" style="margin-bottom:16px"></div>
+      <div class="form-1">
+        <div class="fg">
+          <label class="flabel">Pause From <span class="req">*</span></label>
+          <input class="fcontrol" id="pm-from" type="date">
+          <span class="fhint">First day of pause — no delivery from this date</span>
+        </div>
+        <div class="fg">
+          <label class="flabel">Resume On</label>
+          <input class="fcontrol" id="pm-to" type="date">
+          <span class="fhint">Leave blank for open-ended pause</span>
+        </div>
+        <div class="fg" id="pm-status-wrap">
+          <div class="pause-banner" id="pm-status-msg"></div>
+        </div>
+      </div>
+    </div>
+    <div class="mfooter">
+      <button class="btn btn-danger" id="pm-clear-btn" onclick="clearPauseModal()" style="margin-right:auto">✕ Clear Pause</button>
+      <button class="btn btn-outline" onclick="closeM('pause-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="savePauseModal()">💾 Save Pause</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOPUP MODAL -->
+<div class="backdrop" id="topup-modal">
+  <div class="modal modal-sm">
+    <div class="mhead">
+      <div class="mtitle" id="topup-modal-title">Record Top-up</div>
+      <button class="mclose" onclick="closeM('topup-modal')">×</button>
+    </div>
+    <div class="mbody">
+      <div class="info-box" id="topup-customer-info" style="margin-bottom:16px"></div>
+      <div class="form-1">
+        <div class="fg">
+          <label class="flabel">Amount (₹) <span class="req">*</span></label>
+          <input class="fcontrol" id="tp-amount" type="number" min="1" step="1" placeholder="e.g. 500">
+        </div>
+        <div class="fg">
+          <label class="flabel">Payment Date <span class="req">*</span></label>
+          <input class="fcontrol" id="tp-date" type="date">
+        </div>
+        <div class="fg">
+          <label class="flabel">Payment Mode</label>
+          <select class="fcontrol" id="tp-mode">
+            <option>Cash</option>
+            <option>UPI</option>
+            <option>Bank Transfer</option>
+            <option>Cheque</option>
+          </select>
+        </div>
+        <div class="fg">
+          <label class="flabel">Reference No / UTR</label>
+          <input class="fcontrol" id="tp-ref" placeholder="UPI ref, cheque no, etc.">
+        </div>
+        <div class="fg">
+          <label class="flabel">Recorded By</label>
+          <input class="fcontrol" id="tp-by" placeholder="Staff name">
+        </div>
+        <div class="fg">
+          <label class="flabel">Notes</label>
+          <input class="fcontrol" id="tp-notes" placeholder="Any additional notes">
+        </div>
+      </div>
+    </div>
+    <div class="mfooter">
+      <button class="btn btn-outline" onclick="closeM('topup-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveTopup()">💰 Record Top-up</button>
+    </div>
+  </div>
+</div>
+
+<!-- EDIT TOPUP MODAL -->
+<div class="backdrop" id="edit-topup-modal">
+  <div class="modal modal-sm">
+    <div class="mhead">
+      <div class="mtitle">Edit Top-up</div>
+      <button class="mclose" onclick="closeM('edit-topup-modal')">x</button>
+    </div>
+    <div class="mbody">
+      <div class="info-box" style="margin-bottom:16px;background:var(--danger-light);color:var(--danger)">
+        Editing a top-up will recalculate the wallet balance. Use with care.
+      </div>
+      <div class="form-1">
+        <div class="fg"><label class="flabel">Amount (Rs.) <span class="req">*</span></label><input class="fcontrol" id="etp-amount" type="number" min="1" step="1"></div>
+        <div class="fg"><label class="flabel">Payment Date <span class="req">*</span></label><input class="fcontrol" id="etp-date" type="date"></div>
+        <div class="fg"><label class="flabel">Payment Mode</label><select class="fcontrol" id="etp-mode"><option>Cash</option><option>UPI</option><option>Bank Transfer</option><option>Cheque</option></select></div>
+        <div class="fg"><label class="flabel">Reference No</label><input class="fcontrol" id="etp-ref" placeholder="UPI ref, cheque no, etc."></div>
+        <div class="fg"><label class="flabel">Recorded By</label><input class="fcontrol" id="etp-by" placeholder="Staff name"></div>
+        <div class="fg"><label class="flabel">Notes</label><input class="fcontrol" id="etp-notes" placeholder="Any notes"></div>
+      </div>
+    </div>
+    <div class="mfooter">
+      <button class="btn btn-outline" onclick="closeM('edit-topup-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveEditTopup()">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- CONFIRM -->
+<div class="backdrop" id="confirm-modal">
+  <div class="confirm-box">
+    <div class="confirm-title" id="conf-title">Confirm</div>
+    <div class="confirm-msg" id="conf-msg">Are you sure?</div>
+    <div class="confirm-btns">
+      <button class="btn btn-outline" onclick="closeM('confirm-modal')">Cancel</button>
+      <button class="btn btn-danger" id="conf-ok">Delete</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const SB_URL = 'https://plqujrordybzncvvkqgg.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBscXVqcm9yZHliem5jdnZrcWdnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUzMTQyOTMsImV4cCI6MjA5MDg5MDI5M30.MOmPuTwzoRBteAUCKbdPqOlS0zgWiRgERMZr2FzyyZA';
+
+async function sbFetch(path, opts = {}) {
+  const r = await fetch(`${SB_URL}/rest/v1/${path}`, {
+    ...opts,
+    headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation', ...(opts.headers||{}) }
+  });
+  if (!r.ok) throw new Error(await r.text());
+  const t = await r.text();
+  return t ? JSON.parse(t) : [];
+}
+
+const db = {
+  get:    (t, q='')  => sbFetch(`${t}?${q}`),
+  insert: (t, d)     => sbFetch(t, { method:'POST', body:JSON.stringify(d) }),
+  update: (t, id, d) => sbFetch(`${t}?id=eq.${id}`, { method:'PATCH', body:JSON.stringify(d) }),
+  del:    (t, id)    => sbFetch(`${t}?id=eq.${id}`, { method:'DELETE', headers:{'Prefer':'return=minimal'} })
+};
+
+let customers = [], routes = [], rates = [], overrides = [], wallets = [], topups = [];
+let editCustId = null, editRouteId = null;
+let srch = '', fStatus = '', fRoute = '';
+let viewDate = new Date().toISOString().split('T')[0];
+let pauseFilterRoute = '', pauseSortCol = 'pause_from', pauseSortDir = 'asc';
+let routeViewDate = new Date().toISOString().split('T')[0];
+const DAY_NAMES = ['Su','Mo','Tu','We','Th','Fr','Sa'];
+const DAY_FULL  = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+
+async function boot() {
+  try { routes    = await db.get('gs_routes',    'order=name.asc'); } catch(e) { routes = []; }
+  try { customers = await db.get('gs_customers', 'order=last_name.asc,first_name.asc'); } catch(e) { customers = []; }
+  try { rates     = await db.get('gs_rates',     'order=effective_from.desc'); } catch(e) { rates = []; }
+  try { overrides  = await db.get('gs_quantity_overrides', 'order=from_date.asc'); } catch(e) { overrides = []; }
+  try { wallets    = await db.get('gs_wallets',  'order=customer_id.asc'); } catch(e) { wallets = []; }
+  try { topups     = await db.get('gs_topups',   'order=topup_date.desc'); } catch(e) { topups = []; }
+  go('customers');
+}
+
+const PAGE_TITLES = { customers:'Customers', routes:'Routes', masters:'Masters', dashboard:'Dashboard', delivery:'Daily Delivery', wallet:'Wallet & Payments', bottles:'Bottle Tracking', reports:'Reports', alerts:'Alerts' };
+
+function go(page) {
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(el => { if (el.textContent.trim().toLowerCase().includes(page)) el.classList.add('active'); });
+  document.getElementById('page-title').textContent = PAGE_TITLES[page] || page;
+  srch = ''; fStatus = ''; fRoute = '';
+  if (page === 'customers') renderCustomers();
+  else if (page === 'routes') renderRoutes();
+  else if (page === 'masters') renderMasters();
+  else if (page === 'wallet') renderWallet();
+  else document.getElementById('content').innerHTML = '<div class="empty"><div class="empty-icon">🚧</div><p>Coming in a future phase.</p></div>';
+}
+
+// ── CUSTOMERS ──
+function projectedStatus(c, dateStr) {
+  // Paused overrides everything for the given date
+  if (isOnPause(c, dateStr)) return 'Paused';
+  // If the pause has ended by this date, revert Paused → Active
+  if (c.status === 'Paused' && c.pause_resume && dateStr >= c.pause_resume) return 'Active';
+  return c.status || 'Active';
+}
+
+function renderCustomers() {
+  const total = customers.length;
+  const today = todayStr();
+  const isToday = viewDate === today;
+  const isFuture = viewDate > today;
+  const dateLabel = isToday ? 'Today' : (isFuture ? 'Projected for' : 'Historical for');
+
+  // Project each customer's status on viewDate
+  const active  = customers.filter(c => projectedStatus(c, viewDate) === 'Active').length;
+  const grace   = customers.filter(c => projectedStatus(c, viewDate) === 'Grace').length;
+  const stopped = customers.filter(c => projectedStatus(c, viewDate) === 'Stopped').length;
+  const paused  = customers.filter(c => projectedStatus(c, viewDate) === 'Paused').length;
+
+  // Effective qty -- uses override on viewDate if one exists, else normal quota
+  function effQty(c, dateStr) {
+    const ov = getEffectiveQty(c.id, dateStr);
+    return ov ? (ov.morning + ov.evening) : (c.morning_quota||0) + (c.evening_quota||0);
+  }
+  const litres        = customers.reduce((s,c) => s + (c.morning_quota||0) + (c.evening_quota||0), 0);
+  const litresActive  = customers.filter(c=>projectedStatus(c,viewDate)==='Active').reduce((s,c)=>s+effQty(c,viewDate),0);
+  const litresPaused  = customers.filter(c=>projectedStatus(c,viewDate)==='Paused').reduce((s,c)=>s+effQty(c,viewDate),0);
+  const litresGrace   = customers.filter(c=>projectedStatus(c,viewDate)==='Grace').reduce((s,c)=>s+effQty(c,viewDate),0);
+  const litresStopped = customers.filter(c=>projectedStatus(c,viewDate)==='Stopped').reduce((s,c)=>s+effQty(c,viewDate),0);
+  const curRate = rates.length ? rates[0].rate_per_litre : null;
+
+  let list = customers.filter(c => {
+    const name = `${c.first_name||''} ${c.last_name||''} ${c.customer_code||''}`.toLowerCase();
+    return (!srch || name.includes(srch.toLowerCase()) || (c.phone||'').includes(srch))
+        && (!fStatus || c.status === fStatus)
+        && (!fRoute  || String(c.route_id) === String(fRoute));
+  });
+
+  // Resume alerts (always based on real today)
+  const tomorrow = offsetDate(today, 1);
+  const resumingToday    = customers.filter(c => c.pause_resume === today && c.pause_from && c.pause_from <= today);
+  const resumingTomorrow = customers.filter(c => c.pause_resume === tomorrow && c.pause_from && c.pause_from <= tomorrow);
+  const alertsHtml = [
+    ...resumingToday.map(c => `<div class="alert-banner info">🔔 <div><strong>${esc(c.first_name)} ${esc(c.last_name)}</strong> resumes delivery <strong>today</strong>. Route will include them from today.</div></div>`),
+    ...resumingTomorrow.map(c => `<div class="alert-banner warn">⏰ <div><strong>${esc(c.first_name)} ${esc(c.last_name)}</strong> resumes delivery <strong>tomorrow</strong>. Ensure milkman is informed.</div></div>`)
+  ].join('');
+
+  const dateBarColor = isToday ? 'var(--brand-light)' : isFuture ? '#E6F1FB' : '#f0f3f2';
+  const dateLabelColor = isToday ? 'var(--brand-dark)' : isFuture ? '#0C447C' : 'var(--text-muted)';
+
+  // Active overrides on viewDate
+  const activeOverrides = overrides.filter(o => o.from_date <= viewDate && o.to_date >= viewDate);
+  const ovHtml = activeOverrides.length > 0 ? `
+    <div style="background:#E6F1FB;border-radius:var(--radius);padding:12px 16px;margin-bottom:12px;border-left:3px solid #378ADD">
+      <div style="font-size:12px;font-weight:700;color:#0C447C;margin-bottom:8px">⚖️ Temporary Qty. Change Active on ${isToday?'Today':fmtDate(viewDate)} -- ${activeOverrides.length} customer${activeOverrides.length>1?'s':''}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        ${activeOverrides.map(o => {
+          const c = customers.find(x => String(x.id)===String(o.customer_id));
+          if (!c) return '';
+          return `<div style="background:#fff;border-radius:6px;padding:6px 10px;font-size:12px;border:1px solid #B5D4F4">
+            <strong>${esc(c.first_name)} ${esc(c.last_name)}</strong>
+            <span style="color:var(--text-muted)"> · ${o.morning_qty}L morn + ${o.evening_qty}L eve</span>
+            ${o.reason?`<span style="color:var(--text-hint)"> · ${esc(o.reason)}</span>`:''}
+            ${o.from_date===o.to_date?'':`<span style="color:var(--text-hint)"> · until ${fmtDate(o.to_date)}</span>`}
+          </div>`;
+        }).join('')}
+      </div>
+    </div>` : '';
+
+  document.getElementById('content').innerHTML = alertsHtml + ovHtml + `
+    <div style="background:${dateBarColor};border-radius:var(--radius);padding:10px 16px;margin-bottom:14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <span style="font-size:12px;font-weight:700;color:${dateLabelColor};text-transform:uppercase;letter-spacing:0.5px">${dateLabel}</span>
+      <input type="date" value="${viewDate}" onchange="viewDate=this.value;renderCustomers()"
+        style="padding:5px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:#fff;color:var(--text);outline:none;font-family:inherit">
+      ${!isToday ? `<button onclick="viewDate='${today}';renderCustomers()" style="padding:5px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:#fff;color:var(--text-muted);cursor:pointer;font-family:inherit">↩ Today</button>` : ''}
+      ${isToday ? `<button onclick="viewDate='${tomorrow}';renderCustomers()" style="padding:5px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:#fff;color:#0C447C;cursor:pointer;font-family:inherit">→ Tomorrow</button>` : ''}
+      <span style="font-size:12px;color:${dateLabelColor};margin-left:4px">${!isToday ? `Stats and supply figures shown as they would be on <strong>${fmtDate(viewDate)}</strong> based on scheduled pauses.` : 'Showing live status for today.'}</span>
+    </div>
+    <div class="stats-grid">
+      <div class="stat-card c-green"><div class="stat-label">Daily Customers</div><div class="stat-value">${active+grace}</div><div class="stat-sub">Active + Grace receiving</div></div>
+      <div class="stat-card c-green"><div class="stat-label">Active</div><div class="stat-value">${active}</div><div class="stat-sub">Receiving supply</div></div>
+      <div class="stat-card c-amber"><div class="stat-label">Grace Period</div><div class="stat-value">${grace}</div><div class="stat-sub">Balance = 0, still delivering</div></div>
+      <div class="stat-card"><div class="stat-label">Paused</div><div class="stat-value">${paused}</div><div class="stat-sub">Temporary hold</div></div>
+      <div class="stat-card c-red"><div class="stat-label">Stopped</div><div class="stat-value">${stopped}</div><div class="stat-sub">Supply halted</div></div>
+      <div class="stat-card"><div class="stat-label">Total Customers</div><div class="stat-value">${total}</div><div class="stat-sub">All accounts</div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:18px">
+      <div style="background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);padding:10px 14px">
+        <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Deliverable Supply</div>
+        <div style="font-size:18px;font-weight:700">${(litresActive+litresGrace).toFixed(1)}L</div>
+        <div style="font-size:10px;color:var(--text-hint);margin-top:2px">Active + Grace</div>
+      </div>
+      <div style="background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);padding:10px 14px">
+        <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Active Supply</div>
+        <div style="font-size:18px;font-weight:700;color:var(--brand)">${litresActive.toFixed(1)}L</div>
+        <div style="font-size:10px;color:var(--text-hint);margin-top:2px">${active} customers</div>
+      </div>
+      <div style="background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);padding:10px 14px">
+        <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Grace Supply</div>
+        <div style="font-size:18px;font-weight:700;color:var(--accent)">${litresGrace.toFixed(1)}L</div>
+        <div style="font-size:10px;color:var(--text-hint);margin-top:2px">${grace} customers</div>
+      </div>
+      <div style="background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);padding:10px 14px">
+        <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Paused Supply</div>
+        <div style="font-size:18px;font-weight:700;color:var(--text-muted)">${litresPaused.toFixed(1)}L</div>
+        <div style="font-size:10px;color:var(--text-hint);margin-top:2px">${paused} customers</div>
+      </div>
+      <div style="background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);padding:10px 14px">
+        <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Stopped Supply</div>
+        <div style="font-size:18px;font-weight:700;color:var(--danger)">${litresStopped.toFixed(1)}L</div>
+        <div style="font-size:10px;color:var(--text-hint);margin-top:2px">${stopped} customers</div>
+      </div>
+      <div style="background:var(--bg);border-radius:var(--radius);border:1px solid var(--border);padding:10px 14px">
+        <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Total Supply</div>
+        <div style="font-size:18px;font-weight:700;color:var(--text-muted)">${litres.toFixed(1)}L</div>
+        <div style="font-size:10px;color:var(--text-hint);margin-top:2px">All ${total} customers</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">Customer List</div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-outline btn-sm" onclick="exportCSV()">⬇ Export CSV</button>
+          <button class="btn btn-primary btn-sm" onclick="openAddCust()">+ Add Customer</button>
+        </div>
+      </div>
+      <div class="toolbar">
+        <div class="search-wrap"><span class="si">🔍</span><input placeholder="Search name, code, phone..." value="${srch}" oninput="srch=this.value;renderCustomers()"></div>
+        <select class="flt" onchange="fStatus=this.value;renderCustomers()">
+          <option value="">All Status</option>
+          <option value="Active" ${fStatus==='Active'?'selected':''}>Active</option>
+          <option value="Grace"   ${fStatus==='Grace'   ?'selected':''}>Grace Period</option>
+          <option value="Stopped" ${fStatus==='Stopped'?'selected':''}>Stopped</option>
+          <option value="Paused"  ${fStatus==='Paused' ?'selected':''}>Paused / On Hold</option>
+        </select>
+        <select class="flt" onchange="fRoute=this.value;renderCustomers()">
+          <option value="">All Routes</option>
+          ${routes.map(r => `<option value="${r.id}" ${fRoute==r.id?'selected':''}>${esc(r.name)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="tbl-wrap">
+        ${list.length === 0
+          ? `<div class="empty"><div class="empty-icon">👥</div><p>${total===0?'No customers yet. Add your first customer!':'No customers match the current filters.'}</p></div>`
+          : `<table>
+              <thead><tr><th>Code</th><th>Name</th><th>Contact</th><th>Address</th><th>Route</th><th>Schedule</th><th>Quota / Day</th><th>Payment</th><th>Status</th><th>Actions</th></tr></thead>
+              <tbody>${list.map(c => {
+                const route = routes.find(r => r.id === c.route_id);
+                const ovDay = getEffectiveQty(c.id, viewDate);
+                const totalQ = ovDay ? (ovDay.morning + ovDay.evening) : (c.morning_quota||0)+(c.evening_quota||0);
+                const mQ = ovDay ? ovDay.morning : (c.morning_quota||0);
+                const eQ = ovDay ? ovDay.evening : (c.evening_quota||0);
+                const isOv = !!ovDay;
+                const addrParts = [c.flat_no, c.building_name, c.street, c.city].filter(Boolean);
+                return `<tr>
+                  <td><span class="td-code">${esc(c.customer_code||'--')}</span></td>
+                  <td><div class="td-primary">${esc(c.first_name||'')} ${esc(c.last_name||'')}</div></td>
+                  <td><div>${esc(c.phone||'--')}</div>${c.whatsapp&&c.whatsapp!==c.phone?`<div class="td-sub">WA: ${esc(c.whatsapp)}</div>`:''}</td>
+                  <td style="max-width:170px"><div style="font-size:12px;color:var(--text-muted);line-height:1.4">${addrParts.length?esc(addrParts.join(', ')):'--'}</div>${c.pin?`<div class="td-sub">${esc(c.pin)}${c.state?' · '+esc(c.state):''}</div>`:''}</td>
+                  <td>${routeCell(c, route)}</td>
+                  <td>${schedCell(c)}</td>
+                  <td>
+                    <div style="font-weight:${isOv?'700':'400'};color:${isOv?'#0C447C':'inherit'}">${totalQ}L${isOv?' ⚖️':''}</div>
+                    <div class="td-sub">${mQ}L morn · ${eQ}L eve${isOv?`<span style="color:#0C447C"> (override)</span>`:''}</div>
+                  </td>
+                  <td>${esc(c.payment_mode||'--')}</td>
+                  <td><span class="badge badge-${c.status||'Active'}">${c.status||'Active'}</span></td>
+                  <td>
+                    <div class="acts">
+                      <button class="btn btn-outline btn-xs" onclick="openEditCust(${c.id})">✏️ Edit</button>
+                      <button class="btn btn-xs" style="background:#f0f3f2;color:#4a5e58" onclick="openPause(${c.id})">⏸ Pause</button>
+                      <button class="btn btn-xs" style="background:var(--brand-light);color:var(--brand-dark)" onclick="openOverride(${c.id})">⚖️ Qty</button>
+                      <button class="btn btn-danger btn-xs" onclick="confirmDel('customer',${c.id},'${esc((c.first_name||'')+' '+(c.last_name||''))}')">🗑</button>
+                    </div>
+                    ${ovBadge(c.id)}
+                  </td>
+                </tr>`;
+              }).join('')}</tbody>
+            </table>`}
+      </div>
+      <div class="pager"><div class="pager-info">Showing ${list.length} of ${total} customers</div></div>
+    </div>`;
+}
+
+// ── ROUTES ──
+function sortIcon(col) {
+  if (pauseSortCol !== col) return '<span style="color:var(--text-hint);font-size:10px">⇅</span>';
+  return pauseSortDir === 'asc' ? '↑' : '↓';
+}
+function toggleSort(col) {
+  if (pauseSortCol === col) pauseSortDir = pauseSortDir==='asc'?'desc':'asc';
+  else { pauseSortCol = col; pauseSortDir = 'asc'; }
+  renderRoutes();
+}
+
+function renderRoutes() {
+  const todayReal = todayStr();
+  const rvdIsToday  = routeViewDate === todayReal;
+  const rvdIsFuture = routeViewDate > todayReal;
+  const rvdTomorrow = offsetDate(todayReal, 1);
+  const rvdLabel    = rvdIsToday ? 'Today' : rvdIsFuture ? 'Projected for' : 'Historical for';
+  const rvdBarColor = rvdIsToday ? 'var(--brand-light)' : rvdIsFuture ? '#E6F1FB' : '#f0f3f2';
+  const rvdLabelColor = rvdIsToday ? 'var(--brand-dark)' : rvdIsFuture ? '#0C447C' : 'var(--text-muted)';
+
+  const cards = routes.length === 0
+    ? `<div class="empty"><div class="empty-icon">🗺️</div><p>No routes yet. Add your first route!</p></div>`
+    : `<div class="route-grid">${routes.map(r => {
+        const cc = customers.filter(c => c.route_id===r.id).length;
+        const ll = customers.filter(c => c.route_id===r.id).reduce((s,c)=>s+(c.morning_quota||0)+(c.evening_quota||0),0);
+        const maxC = Math.max(1,...routes.map(x=>customers.filter(c=>c.route_id===x.id).length));
+        return `<div class="route-card">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start">
+            <div><div class="rc-name">🗺️ ${esc(r.name)}</div><div style="font-size:12px;color:var(--text-muted);margin-top:2px">${esc(r.area||'')}${r.milkman?' · '+esc(r.milkman):''}</div></div>
+            <span class="badge badge-route">${esc(r.delivery_time||'Both')}</span>
+          </div>
+          <div class="rc-meta"><span>👥 ${cc} customers</span><span>🥛 ${ll.toFixed(1)}L/day</span></div>
+          <div class="rc-bar"><div class="rc-bar-fill" style="width:${Math.round(cc/maxC*100)}%"></div></div>
+          ${r.notes?`<div style="font-size:11px;color:var(--text-hint);margin-top:8px">${esc(r.notes)}</div>`:''}
+          <div style="display:flex;gap:6px;margin-top:12px">
+            <button class="btn btn-outline btn-sm" style="flex:1" onclick="openEditRoute(${r.id})">✏️ Edit</button>
+            <button class="btn btn-danger btn-sm" onclick="confirmDel('route',${r.id},'${esc(r.name)}')">🗑</button>
+          </div>
+        </div>`;
+      }).join('')}</div>`;
+
+  // ── PAUSED TABLE -- based on routeViewDate ──
+  let pausedCustomers = customers.filter(c => isOnPause(c, routeViewDate));
+  if (pauseFilterRoute) pausedCustomers = pausedCustomers.filter(c => String(c.route_id) === String(pauseFilterRoute));
+  pausedCustomers = [...pausedCustomers].sort((a, b) => {
+    const valA = (a[pauseSortCol] || '9999-99-99');
+    const valB = (b[pauseSortCol] || '9999-99-99');
+    return pauseSortDir === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+  });
+  const allPaused = customers.filter(c => isOnPause(c, routeViewDate));
+  const routeOpts = '<option value="">All Routes</option>' +
+    routes.map(r => `<option value="${r.id}" ${pauseFilterRoute==r.id?'selected':''}>${esc(r.name)}</option>`).join('');
+
+  const pauseRows = pausedCustomers.map(c => {
+    const r = routes.find(x => x.id === c.route_id);
+    return `<tr id="pause-row-${c.id}">
+      <td><span class="badge badge-route">${esc(r ? r.name : 'No Route')}</span></td>
+      <td class="td-primary">${esc(c.first_name||'')} ${esc(c.last_name||'')}<div class="td-sub">${esc(c.customer_code||'')}</div></td>
+      <td>
+        <input type="date" value="${c.pause_from||''}" id="pf-${c.id}"
+          style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:inherit;color:var(--text);background:var(--bg);outline:none;width:130px"
+          onfocus="this.style.borderColor='var(--brand-mid)'" onblur="this.style.borderColor='var(--border)'">
+      </td>
+      <td>
+        <input type="date" value="${c.pause_resume||''}" id="pr-${c.id}"
+          style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:inherit;color:var(--text);background:var(--bg);outline:none;width:130px"
+          onfocus="this.style.borderColor='var(--brand-mid)'" onblur="this.style.borderColor='var(--border)'">
+        <div style="font-size:10px;color:var(--text-hint);margin-top:2px">Leave blank = open-ended</div>
+      </td>
+      <td>${(c.morning_quota||0)+(c.evening_quota||0)}L/day</td>
+      <td>
+        <button class="btn btn-primary btn-xs" onclick="savePauseDates(${c.id})">💾 Save</button>
+        <button class="btn btn-danger btn-xs" style="margin-top:4px" onclick="clearPause(${c.id})">✕ Clear</button>
+      </td>
+    </tr>`;
+  }).join('');
+
+  const pauseEmpty = pausedCustomers.length === 0
+    ? `<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-hint)">No paused customers on ${rvdIsToday?'today':fmtDate(routeViewDate)}</td></tr>`
+    : pauseRows;
+
+  const pausedReport = `
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-header">
+        <div class="card-title">⏸ Paused Customers</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <select class="flt" onchange="pauseFilterRoute=this.value;renderRoutes()" style="font-size:12px;padding:5px 10px">${routeOpts}</select>
+          <div style="font-size:12px;color:var(--text-muted)">${allPaused.length} on hold${pauseFilterRoute?' · '+pausedCustomers.length+' shown':''}</div>
+        </div>
+      </div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr>
+            <th>Route</th><th>Customer</th>
+            <th style="cursor:pointer;user-select:none;white-space:nowrap" onclick="toggleSort('pause_from')">Paused From ${sortIcon('pause_from')}</th>
+            <th style="cursor:pointer;user-select:none;white-space:nowrap" onclick="toggleSort('pause_resume')">Resumes On ${sortIcon('pause_resume')}</th>
+            <th>Daily Supply</th><th>Edit Dates</th>
+          </tr></thead>
+          <tbody>${pauseEmpty}</tbody>
+        </table>
+      </div>
+    </div>`;
+
+  // ── OVERRIDES TABLE -- only show entries active on routeViewDate (same as paused logic) ──
+  const activeOvs = overrides.filter(o => o.from_date <= routeViewDate && o.to_date >= routeViewDate);
+  const ovRouteOpts = '<option value="">All Routes</option>' +
+    routes.map(r => `<option value="${r.id}">${esc(r.name)}</option>`).join('');
+
+  const ovRows = activeOvs.map(o => {
+    const c = customers.find(x => String(x.id)===String(o.customer_id));
+    if (!c) return '';
+    const r = routes.find(x => x.id === c.route_id);
+    const normalTotal = (c.morning_quota||0)+(c.evening_quota||0);
+    const ovTotal = (o.morning_qty||0)+(o.evening_qty||0);
+    const diff = ovTotal - normalTotal;
+    const diffStr = diff > 0
+      ? `<span style="color:var(--brand);font-weight:600">+${diff}L</span>`
+      : diff < 0
+        ? `<span style="color:var(--danger);font-weight:600">${diff}L</span>`
+        : '<span style="color:var(--text-hint)">--</span>';
+    return `<tr>
+      <td><span class="badge badge-route">${esc(r ? r.name : 'No Route')}</span></td>
+      <td class="td-primary">${esc(c.first_name||'')} ${esc(c.last_name||'')}
+        <div class="td-sub">${esc(c.customer_code||'')}</div>
+      </td>
+      <td style="color:var(--text-muted)">${normalTotal}L/day
+        <div class="td-sub">${c.morning_quota||0}L morn + ${c.evening_quota||0}L eve</div>
+      </td>
+      <td style="font-weight:600;color:#0C447C">${ovTotal}L/day
+        <div class="td-sub">${o.morning_qty||0}L morn + ${o.evening_qty||0}L eve</div>
+      </td>
+      <td>${diffStr}</td>
+      <td>${o.from_date===o.to_date ? fmtDate(o.from_date) : fmtDate(o.from_date)+' → '+fmtDate(o.to_date)}</td>
+      <td style="font-size:12px;color:var(--text-hint)">${esc(o.reason||'--')}</td>
+      <td><div class="acts">
+        <button class="btn btn-outline btn-xs" onclick="openEditOverride(${o.id})">✏️ Edit</button>
+        <button class="btn btn-danger btn-xs" onclick="deleteOverride(${o.id})">🗑</button>
+      </div></td>
+    </tr>`;
+  }).join('');
+
+  const ovEmptyRow = activeOvs.length === 0
+    ? `<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text-hint)">No qty. changes on ${rvdIsToday?'today':fmtDate(routeViewDate)}</td></tr>`
+    : ovRows;
+
+  const ovReport = `
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-header">
+        <div class="card-title">⚖️ Temporary Qty. Changes</div>
+        <div style="font-size:12px;color:var(--text-muted)">${activeOvs.length} customer${activeOvs.length!==1?'s':''} with modified qty on ${rvdIsToday?'today':fmtDate(routeViewDate)}</div>
+      </div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr>
+            <th>Route</th><th>Customer</th>
+            <th>Normal Qty</th><th>Override Qty</th><th>Diff</th>
+            <th>Date / Range</th><th>Reason</th><th>Actions</th>
+          </tr></thead>
+          <tbody>${ovEmptyRow}</tbody>
+        </table>
+      </div>
+    </div>`;
+
+  document.getElementById('content').innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div style="background:${rvdBarColor};border-radius:var(--radius);padding:8px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;flex:1;margin-right:12px">
+        <span style="font-size:11px;font-weight:700;color:${rvdLabelColor};text-transform:uppercase;letter-spacing:0.5px">${rvdLabel}</span>
+        <input type="date" value="${routeViewDate}" onchange="routeViewDate=this.value;renderRoutes()"
+          style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:#fff;color:var(--text);outline:none;font-family:inherit">
+        ${rvdIsToday
+          ? `<button onclick="routeViewDate='${rvdTomorrow}';renderRoutes()" style="padding:4px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:#fff;color:#0C447C;cursor:pointer;font-family:inherit">→ Tomorrow</button>`
+          : `<button onclick="routeViewDate='${todayReal}';renderRoutes()" style="padding:4px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:#fff;color:var(--text-muted);cursor:pointer;font-family:inherit">↩ Today</button>`}
+        <span style="font-size:12px;color:${rvdLabelColor}">${rvdIsToday ? 'Showing paused customers and qty. changes for today.' : `Showing paused customers and qty. changes for ${fmtDate(routeViewDate)}.`}</span>
+      </div>
+      <button class="btn btn-primary" onclick="openAddRoute()">+ Add Route</button>
+    </div>
+    ${pausedReport}
+    ${ovReport}
+    <div class="card"><div class="card-body">${cards}</div></div>`;
+}
+
+// ── MASTERS ──
+function renderMasters() {
+  const cur = rates.length ? rates[0] : null;
+  const histRows = rates.map((r,i) => `
+    <tr class="${i===0?'cur-rate-row':''}">
+      <td>${i===0?'<span class="badge badge-Active">Current</span>':`<span style="font-size:11px;color:var(--text-hint)">#${rates.length-i}</span>`}</td>
+      <td style="font-size:20px;font-weight:700;color:var(--brand)">Rs.${r.rate_per_litre}/L</td>
+      <td style="font-weight:${i===0?'600':'400'}">${fmtDate(r.effective_from)}</td>
+      <td style="color:var(--text-muted)">${esc(r.notes||'--')}</td>
+      <td style="color:var(--text-hint);font-size:12px">${fmtDate(r.created_at)}</td>
+    </tr>`).join('');
+  document.getElementById('content').innerHTML = `
+    <div class="tabs"><div class="tab active">Rate Master</div></div>
+    <div class="rate-hero">
+      <div>
+        <div class="rate-hero-label">Current Milk Rate</div>
+        <div class="rate-hero-value">${cur?`Rs.${cur.rate_per_litre}`:'--'}</div>
+        <div class="rate-hero-sub">${cur?`Effective from ${fmtDate(cur.effective_from)}`:'No rate set yet -- add one to begin billing'}</div>
+      </div>
+      <button class="btn" style="background:rgba(255,255,255,0.15);color:#fff;border:1px solid rgba(255,255,255,0.25)" onclick="openRateModal()">+ Set New Rate</button>
+    </div>
+    <div class="card">
+      <div class="card-header"><div class="card-title">Rate History</div><div style="font-size:12px;color:var(--text-muted)">${rates.length} ${rates.length===1?'entry':'entries'}</div></div>
+      ${rates.length===0
+        ? `<div class="empty"><div class="empty-icon">💰</div><p>No rates set yet. Add your starting rate above.</p></div>`
+        : `<div class="tbl-wrap"><table class="rate-tbl"><thead><tr><th>Status</th><th>Rate</th><th>Effective From</th><th>Notes</th><th>Added On</th></tr></thead><tbody>${histRows}</tbody></table></div>`}
+    </div>
+    <div class="card" style="margin-top:16px">
+      <div class="card-header"><div class="card-title">How Rate Changes Work</div></div>
+      <div class="card-body" style="font-size:13px;color:var(--text-muted);line-height:1.9">
+        <p>✅ Setting a new rate applies it to <strong>all customers</strong> from the <strong>Effective From date</strong>.</p>
+        <p>📅 Deliveries before that date use the previous rate -- past billing is never retroactively changed.</p>
+        <p>📋 All past rates are preserved here for audit trails and monthly statement generation.</p>
+        <p>🔔 Individual customer rates are not supported -- one global rate applies to everyone.</p>
+      </div>
+    </div>`;
+}
+
+// ── CUSTOMER MODAL ──
+function openAddCust() {
+  editCustId = null;
+  document.getElementById('cust-modal-title').textContent = 'Add Customer';
+  ['c-code','c-fname','c-lname','c-phone','c-wa','c-building','c-flat','c-floor','c-street','c-city','c-pin','c-state','c-morning','c-evening','c-deposit','c-joined','c-notes','c-opening-bal'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  document.getElementById('c-grace').value='3';
+  document.getElementById('c-payment').value='Cash';
+  document.getElementById('c-status').value='Active';
+  var obEl = document.getElementById('c-opening-bal');
+  if (obEl) obEl.closest('.fg').style.display = 'flex';
+  document.getElementById('c-sched-type').value='Daily';
+  document.getElementById('day-picker-wrap').style.display='none';
+  document.querySelectorAll('.day-btn').forEach(b=>b.classList.remove('on'));
+  fillRouteDrop(); openM('cust-modal');
+}
+
+function openEditCust(id) {
+  var obWrap = document.getElementById('c-opening-bal');
+  if (obWrap) { obWrap.closest('.fg').style.display = 'none'; }
+  const c = customers.find(x=>x.id===id); if(!c) return;
+  editCustId = id;
+  document.getElementById('cust-modal-title').textContent = 'Edit Customer';
+  const set=(eid,val)=>{const el=document.getElementById(eid);if(el)el.value=val||'';};
+  set('c-code',c.customer_code); set('c-fname',c.first_name); set('c-lname',c.last_name);
+  set('c-phone',c.phone); set('c-wa',c.whatsapp);
+  set('c-building',c.building_name); set('c-flat',c.flat_no); set('c-floor',c.floor);
+  set('c-street',c.street); set('c-city',c.city); set('c-pin',c.pin); set('c-state',c.state);
+  set('c-morning',c.morning_quota); set('c-evening',c.evening_quota);
+  set('c-deposit',c.bottle_deposit); set('c-grace',c.grace_days||3);
+  set('c-joined', c.joining_date); set('c-notes', c.delivery_notes);
+  document.getElementById('c-payment').value=c.payment_mode||'Cash';
+  document.getElementById('c-status').value=c.status||'Active';
+  // Schedule
+  const stype = c.schedule_type || 'Daily';
+  document.getElementById('c-sched-type').value = stype;
+  const dpw = document.getElementById('day-picker-wrap');
+  dpw.style.display = stype==='Custom' ? 'flex' : 'none';
+  document.querySelectorAll('.day-btn').forEach(b => {
+    const days = c.schedule_days ? c.schedule_days.split(',') : [];
+    b.classList.toggle('on', days.includes(b.dataset.day));
+  });
+  // Pause
+
+  fillRouteDrop(c.route_id); openM('cust-modal');
+}
+
+function fillRouteDrop(selId='') {
+  document.getElementById('c-route').innerHTML =
+    '<option value="">-- Select Route --</option>' +
+    routes.map(r=>`<option value="${r.id}" ${String(r.id)===String(selId)?'selected':''}>${esc(r.name)}</option>`).join('');
+}
+
+function checkDupPhone(el) {
+  const phone = el.value.trim();
+  const warn = document.getElementById('phone-dup-warn');
+  const dup = customers.some(c => c.phone === phone && c.id !== editCustId);
+  warn.style.display = dup ? 'block' : 'none';
+}
+
+async function saveCustomer() {
+  const fname=v('c-fname'), lname=v('c-lname'), phone=v('c-phone'), code=v('c-code');
+  if(!code)  return toast('Customer Code is required','error');
+  if(!fname) return toast('First Name is required','error');
+  if(!lname) return toast('Last Name is required','error');
+  if(!phone) return toast('Phone is required','error');
+  const dupPhone = customers.some(c => c.phone === phone && c.id !== editCustId);
+  if(dupPhone) return toast('This phone number is already used by another customer','error');
+  const schedType = v('c-sched-type');
+  const selDays = schedType==='Custom'
+    ? [...document.querySelectorAll('.day-btn.on')].map(b=>b.dataset.day).join(',')
+    : '';
+  if (schedType==='Custom' && !selDays) return toast('Select at least one delivery day','error');
+  const data = {
+    customer_code:code, first_name:fname, last_name:lname, name:`${fname} ${lname}`,
+    phone, whatsapp:v('c-wa')||null,
+    building_name:v('c-building')||null, flat_no:v('c-flat')||null, floor:v('c-floor')||null,
+    street:v('c-street')||null, city:v('c-city')||null, pin:v('c-pin')||null, state:v('c-state')||null,
+    morning_quota:parseFloat(v('c-morning'))||0, evening_quota:parseFloat(v('c-evening'))||0,
+    bottle_deposit:parseFloat(v('c-deposit'))||0, grace_days:parseInt(v('c-grace'))||3,
+    payment_mode:v('c-payment'), status:v('c-status'), route_id:v('c-route')||null,
+    schedule_type:schedType, schedule_days:selDays||null,
+    joining_date:v('c-joined')||null, delivery_notes:v('c-notes')||null
+  };
+  try {
+    if(editCustId) {
+      await db.update('gs_customers',editCustId,data);
+      const i=customers.findIndex(c=>c.id===editCustId); if(i!==-1) customers[i]={...customers[i],...data};
+      toast('Customer updated','success');
+    } else {
+      const res=await db.insert('gs_customers',data); customers.push(res[0]);
+      const openingBal = parseFloat((document.getElementById('c-opening-bal')||{}).value)||0;
+      if (openingBal > 0 && res[0]) {
+        const newCustId = res[0].id;
+        const joinDate = data.joining_date || todayStr();
+        const wRes = await db.insert('gs_wallets', { customer_id:newCustId, balance:openingBal, last_topup_date:joinDate, last_topup_amount:openingBal });
+        if (wRes[0]) wallets.push(wRes[0]);
+        const tRes = await db.insert('gs_topups', { customer_id:newCustId, amount:openingBal, payment_mode:data.payment_mode||'Cash', recorded_by:'Opening Balance', notes:'Opening balance on joining', topup_date:joinDate });
+        if (tRes[0]) topups.unshift(tRes[0]);
+      }
+      toast('Customer added','success');
+    }
+    closeM('cust-modal'); renderCustomers();
+  } catch(e) { toast('Error: '+e.message,'error'); }
+}
+
+// ── ROUTE MODAL ──
+function openAddRoute() {
+  editRouteId=null;
+  document.getElementById('route-modal-title').textContent='Add Route';
+  ['r-name','r-area','r-milkman','r-notes'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  document.getElementById('r-time').value='Morning'; openM('route-modal');
+}
+function openEditRoute(id) {
+  const r=routes.find(x=>x.id===id); if(!r) return;
+  editRouteId=id;
+  document.getElementById('route-modal-title').textContent='Edit Route';
+  document.getElementById('r-name').value=r.name||''; document.getElementById('r-area').value=r.area||'';
+  document.getElementById('r-milkman').value=r.milkman||''; document.getElementById('r-time').value=r.delivery_time||'Morning';
+  document.getElementById('r-notes').value=r.notes||''; openM('route-modal');
+}
+async function saveRoute() {
+  const name=v('r-name'); if(!name) return toast('Route name is required','error');
+  const data={name,area:v('r-area')||null,milkman:v('r-milkman')||null,delivery_time:v('r-time'),notes:v('r-notes')||null};
+  try {
+    if(editRouteId) {
+      await db.update('gs_routes',editRouteId,data);
+      const i=routes.findIndex(r=>r.id===editRouteId); if(i!==-1) routes[i]={...routes[i],...data};
+      toast('Route updated','success');
+    } else {
+      const res=await db.insert('gs_routes',data); routes.push(res[0]);
+      toast('Route added','success');
+    }
+    closeM('route-modal'); renderRoutes();
+  } catch(e) { toast('Error: '+e.message,'error'); }
+}
+
+// ── RATE MODAL ──
+function openRateModal() {
+  document.getElementById('rt-rate').value='';
+  document.getElementById('rt-notes').value='';
+  document.getElementById('rt-date').value=new Date().toISOString().split('T')[0];
+  openM('rate-modal');
+}
+async function saveRate() {
+  const rate=parseFloat(v('rt-rate')), date=v('rt-date');
+  if(!rate||rate<=0) return toast('Please enter a valid rate','error');
+  if(!date) return toast('Effective date is required','error');
+  try {
+    const res=await db.insert('gs_rates',{rate_per_litre:rate,effective_from:date,notes:v('rt-notes')||null});
+    rates.unshift(res[0]);
+    toast(`Rate Rs.${rate}/L saved -- effective ${fmtDate(date)}`,'success');
+    closeM('rate-modal'); renderMasters();
+  } catch(e) { toast('Error: '+e.message,'error'); }
+}
+
+// ── DELETE ──
+function confirmDel(type,id,name) {
+  document.getElementById('conf-title').textContent=`Delete ${type==='customer'?'Customer':'Route'}`;
+  document.getElementById('conf-msg').textContent=`Delete "${name}"? This cannot be undone.`;
+  document.getElementById('conf-ok').onclick=()=>doDel(type,id);
+  openM('confirm-modal');
+}
+async function doDel(type,id) {
+  try {
+    if(type==='customer') {
+      await db.del('gs_customers',id); customers=customers.filter(c=>c.id!==id);
+      closeM('confirm-modal'); toast('Customer deleted','success'); renderCustomers();
+    } else {
+      if(customers.some(c=>c.route_id===id)) { closeM('confirm-modal'); return toast('Route has customers -- reassign them first','error'); }
+      await db.del('gs_routes',id); routes=routes.filter(r=>r.id!==id);
+      closeM('confirm-modal'); toast('Route deleted','success'); renderRoutes();
+    }
+  } catch(e) { toast('Error: '+e.message,'error'); }
+}
+
+// ── EXPORT ──
+function exportCSV() {
+  const hdr=['Code','First Name','Last Name','Phone','WhatsApp','Building','Flat','Floor','Street','City','PIN','State','Route','Morning(L)','Evening(L)','Deposit(Rs.)','Grace Days','Payment','Status','Schedule','Delivery Days','Joining Date','Pause From','Resume On','Delivery Notes'];
+  const rows=customers.map(c=>{
+    const rt=routes.find(r=>r.id===c.route_id);
+    const days=(c.schedule_days||'').split(',').filter(Boolean).map(d=>['Su','Mo','Tu','We','Th','Fr','Sa'][+d]).join(' ');
+    return[c.customer_code,c.first_name,c.last_name,c.phone,c.whatsapp,c.building_name,c.flat_no,c.floor,c.street,c.city,c.pin,c.state,rt?rt.name:'',c.morning_quota,c.evening_quota,c.bottle_deposit,c.grace_days,c.payment_mode,c.status,c.schedule_type||'Daily',days,c.joining_date||'',c.pause_from||'',c.pause_resume||'',c.delivery_notes||''];
+  });
+  const csv=[hdr,...rows].map(r=>r.map(x=>`"${(x||'').toString().replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+  a.download='gauras-customers.csv'; a.click();
+}
+
+// ── PAUSE MODAL (standalone) ──
+let pauseModalCustId = null;
+
+function openPause(custId) {
+  pauseModalCustId = custId;
+  const c = customers.find(x => x.id === custId);
+  if (!c) return;
+  document.getElementById('pause-modal-title').textContent = `Pause -- ${c.first_name} ${c.last_name}`;
+  document.getElementById('pause-customer-info').innerHTML =
+    `<strong>${esc(c.first_name)} ${esc(c.last_name)}</strong> · ${esc(c.customer_code||'')} · Route: ${esc((routes.find(r=>r.id===c.route_id)||{}).name||'--')}`;
+  document.getElementById('pm-from').value = c.pause_from || '';
+  document.getElementById('pm-to').value   = c.pause_resume || '';
+  // Show clear button only if pause exists
+  document.getElementById('pm-clear-btn').style.display = c.pause_from ? 'inline-flex' : 'none';
+  updatePauseModalStatus();
+  openM('pause-modal');
+}
+
+function updatePauseModalStatus() {
+  const pf = document.getElementById('pm-from').value;
+  const pt = document.getElementById('pm-to').value;
+  const wrap = document.getElementById('pm-status-wrap');
+  const msg  = document.getElementById('pm-status-msg');
+  if (!pf) { wrap.style.display='none'; return; }
+  wrap.style.display = 'block';
+  const today = todayStr();
+  if (isOnPause({pause_from:pf, pause_resume:pt||null}, today)) {
+    msg.className = 'pause-banner active-pause';
+    msg.textContent = `⏸ Currently paused${pt?' -- resumes '+fmtDate(pt):' (open-ended)'}`;
+  } else if (pf > today) {
+    msg.className = 'pause-banner';
+    msg.textContent = `⏳ Pause scheduled from ${fmtDate(pf)}${pt?' to '+fmtDate(pt):''}`;
+  } else {
+    msg.className = 'pause-banner';
+    msg.textContent = `✅ Pause period has ended`;
+  }
+}
+
+async function savePauseModal() {
+  const pf = document.getElementById('pm-from').value || null;
+  const pt = document.getElementById('pm-to').value   || null;
+  if (!pf) return toast('Please set a Pause From date','error');
+  if (pf && pt && pt < pf) return toast('Resume date must be after pause date','error');
+  const c = customers.find(x => x.id === pauseModalCustId);
+  if (!c) return;
+  const newStatus = autoStatus(c.status||'Active', pf, pt);
+  try {
+    await db.update('gs_customers', pauseModalCustId, { pause_from:pf, pause_resume:pt, status:newStatus });
+    const i = customers.findIndex(x => x.id === pauseModalCustId);
+    if (i !== -1) customers[i] = { ...customers[i], pause_from:pf, pause_resume:pt, status:newStatus };
+    toast('Pause saved','success');
+    closeM('pause-modal');
+    renderCustomers();
+  } catch(e) { toast('Error: '+e.message,'error'); }
+}
+
+async function clearPauseModal() {
+  const c = customers.find(x => x.id === pauseModalCustId);
+  if (!c) return;
+  try {
+    await db.update('gs_customers', pauseModalCustId, { pause_from:null, pause_resume:null, status:'Active' });
+    const i = customers.findIndex(x => x.id === pauseModalCustId);
+    if (i !== -1) customers[i] = { ...customers[i], pause_from:null, pause_resume:null, status:'Active' };
+    toast('Pause cleared -- customer set to Active','success');
+    closeM('pause-modal');
+    renderCustomers();
+  } catch(e) { toast('Error: '+e.message,'error'); }
+}
+
+// ── SCHEDULE & PAUSE HELPERS ──
+function toggleDayPicker() {
+  const t = document.getElementById('c-sched-type').value;
+  document.getElementById('day-picker-wrap').style.display = t==='Custom' ? 'flex' : 'none';
+}
+function toggleDay(el) { el.classList.toggle('on'); }
+
+function todayStr() { return new Date().toISOString().split('T')[0]; }
+function offsetDate(dateStr, days) {
+  const d = new Date(dateStr); d.setDate(d.getDate()+days);
+  return d.toISOString().split('T')[0];
+}
+function isOnPause(c, dateStr) {
+  if (!c.pause_from) return false;
+  const from = c.pause_from, to = c.pause_resume;
+  return dateStr >= from && (!to || dateStr < to);
+}
+function isDeliveryDay(c, dateStr) {
+  if (isOnPause(c, dateStr)) return false;
+  if ((c.schedule_type||'Daily')==='Daily') return true;
+  const dow = new Date(dateStr).getDay();
+  const days = (c.schedule_days||'').split(',').map(Number);
+  return days.includes(dow);
+}
+function routeCell(c, route) {
+  const today = todayStr();
+  const routeTag = route
+    ? `<span class="badge badge-route">${esc(route.name)}</span>`
+    : '<span style="color:var(--text-hint)">--</span>';
+  if (isOnPause(c, today)) {
+    return `${routeTag}<div style="font-size:11px;color:#854F0B;margin-top:3px">⏸ Paused from route</div>`;
+  }
+  return routeTag;
+}
+
+function schedCell(c) {
+  const today = todayStr();
+  if (isOnPause(c, today)) {
+    const resume = c.pause_resume ? ` · resumes ${fmtDate(c.pause_resume)}` : '';
+    return `<span class="badge badge-Paused">⏸ Paused${resume}</span>`;
+  }
+  if ((c.schedule_type||'Daily')==='Daily') return `<span class="sched-pill">📅 Daily</span>`;
+  const days = (c.schedule_days||'').split(',').map(Number).filter(d=>!isNaN(d));
+  const labels = days.sort().map(d=>DAY_NAMES[d]).join(' ');
+  return `<span class="sched-pill">📅 ${labels}</span>`;
+}
+function autoStatus(currentStatus, pauseFrom, pauseTo) {
+  // If already Grace or Stopped, don't override
+  if (currentStatus === 'Grace' || currentStatus === 'Stopped') return currentStatus;
+  const today = todayStr();
+  if (pauseFrom && isOnPause({pause_from:pauseFrom, pause_resume:pauseTo}, today)) return 'Paused';
+  // If pause has ended or not started yet and status was Paused, revert to Active
+  if (currentStatus === 'Paused' && (!pauseFrom || !isOnPause({pause_from:pauseFrom, pause_resume:pauseTo}, today))) return 'Active';
+  return currentStatus;
+}
+
+
+// ── QUANTITY OVERRIDES ──
+let editingOverrideCustId = null;
+let editingOverrideId = null; // null = new, number = editing existing
+
+function ovBadge(custId) {
+  const today = todayStr();
+  const active = overrides.filter(o => String(o.customer_id)===String(custId) && o.from_date <= today && o.to_date >= today);
+  const c = customers.find(x => x.id === custId);
+  const paused = c && isOnPause(c, today);
+  return [
+    paused ? `<div style="font-size:10px;color:#4a5e58;background:#f0f3f2;padding:2px 6px;border-radius:4px;margin-top:3px;display:inline-block">⏸ Paused${c.pause_resume?' · resumes '+fmtDate(c.pause_resume):''}</div>` : '',
+    active.length ? `<div style="font-size:10px;color:#0C447C;background:#E6F1FB;padding:2px 6px;border-radius:4px;margin-top:3px;display:inline-block">⚖️ Qty change active</div>` : ''
+  ].join('');
+}
+
+function toggleOvType() {
+  const t = document.getElementById('ov-type').value;
+  document.getElementById('ov-date-single').style.display  = t==='single' ? 'flex' : 'none';
+  document.getElementById('ov-date-from-wrap').style.display = t==='range' ? 'flex' : 'none';
+  document.getElementById('ov-date-to-wrap').style.display   = t==='range' ? 'flex' : 'none';
+}
+
+function openOverride(custId) {
+  editingOverrideId = null;
+  editingOverrideCustId = custId;
+  const c = customers.find(x => x.id === custId);
+  if (!c) return;
+  document.getElementById('ov-modal-title').textContent = `Temporary Qty. Change -- ${c.first_name} ${c.last_name}`;
+  document.getElementById('ov-customer-info').innerHTML =
+    `Normal quota: <strong>${c.morning_quota||0}L morning</strong> + <strong>${c.evening_quota||0}L evening</strong> = <strong>${(c.morning_quota||0)+(c.evening_quota||0)}L/day</strong>`;
+  document.getElementById('ov-morning-hint').textContent = `Normal: ${c.morning_quota||0}L`;
+  document.getElementById('ov-evening-hint').textContent = `Normal: ${c.evening_quota||0}L`;
+  document.getElementById('ov-type').value = 'single';
+  document.getElementById('ov-date').value = offsetDate(todayStr(), 1);
+  document.getElementById('ov-from').value = '';
+  document.getElementById('ov-to').value = '';
+  document.getElementById('ov-morning').value = c.morning_quota || 0;
+  document.getElementById('ov-evening').value = c.evening_quota || 0;
+  document.getElementById('ov-reason').value = '';
+  toggleOvType();
+  openM('override-modal');
+}
+
+function openEditOverride(ovId) {
+  const o = overrides.find(x => x.id === ovId);
+  if (!o) return;
+  editingOverrideId = ovId;
+  editingOverrideCustId = o.customer_id;
+  const c = customers.find(x => String(x.id)===String(o.customer_id));
+  if (!c) return;
+  document.getElementById('ov-modal-title').textContent = `Edit Qty. Change -- ${c.first_name} ${c.last_name}`;
+  document.getElementById('ov-customer-info').innerHTML =
+    `Normal quota: <strong>${c.morning_quota||0}L morning</strong> + <strong>${c.evening_quota||0}L evening</strong> = <strong>${(c.morning_quota||0)+(c.evening_quota||0)}L/day</strong>`;
+  document.getElementById('ov-morning-hint').textContent = `Normal: ${c.morning_quota||0}L`;
+  document.getElementById('ov-evening-hint').textContent = `Normal: ${c.evening_quota||0}L`;
+  // Detect single vs range
+  const isSingle = o.from_date === o.to_date;
+  document.getElementById('ov-type').value = isSingle ? 'single' : 'range';
+  document.getElementById('ov-date').value  = o.from_date || '';
+  document.getElementById('ov-from').value  = o.from_date || '';
+  document.getElementById('ov-to').value    = o.to_date || '';
+  document.getElementById('ov-morning').value = o.morning_qty || 0;
+  document.getElementById('ov-evening').value = o.evening_qty || 0;
+  document.getElementById('ov-reason').value  = o.reason || '';
+  toggleOvType();
+  openM('override-modal');
+}
+
+async function deleteOverride(ovId) {
+  try {
+    await db.del('gs_quantity_overrides', ovId);
+    overrides = overrides.filter(o => o.id !== ovId);
+    toast('Override deleted','success');
+    renderRoutes();
+  } catch(e) { toast('Error: '+e.message,'error'); }
+}
+
+async function saveOverride() {
+  const type = document.getElementById('ov-type').value;
+  let fromDate, toDate;
+  if (type === 'single') {
+    fromDate = document.getElementById('ov-date').value;
+    toDate = fromDate;
+  } else {
+    fromDate = document.getElementById('ov-from').value;
+    toDate   = document.getElementById('ov-to').value;
+  }
+  if (!fromDate) return toast('Please select a date','error');
+  if (type==='range' && !toDate) return toast('Please select an end date','error');
+  if (type==='range' && toDate < fromDate) return toast('End date must be after start date','error');
+  const morning = parseFloat(document.getElementById('ov-morning').value) || 0;
+  const evening = parseFloat(document.getElementById('ov-evening').value) || 0;
+  const data = {
+    customer_id: editingOverrideCustId,
+    from_date: fromDate, to_date: toDate,
+    morning_qty: morning, evening_qty: evening,
+    reason: document.getElementById('ov-reason').value || null
+  };
+  try {
+    if (editingOverrideId) {
+      await db.update('gs_quantity_overrides', editingOverrideId, data);
+      const i = overrides.findIndex(o => o.id === editingOverrideId);
+      if (i !== -1) overrides[i] = { ...overrides[i], ...data };
+      toast('Qty. change updated','success');
+    } else {
+      const res = await db.insert('gs_quantity_overrides', data);
+      overrides.push(res[0]);
+      toast('Qty. change saved -- auto-reverts after '+fmtDate(toDate),'success');
+    }
+    editingOverrideId = null;
+    closeM('override-modal');
+    renderCustomers();
+    renderRoutes();
+  } catch(e) { toast('Error: '+e.message,'error'); }
+}
+
+function getEffectiveQty(custId, dateStr) {
+  const active = overrides.filter(o =>
+    String(o.customer_id)===String(custId) &&
+    o.from_date <= dateStr && o.to_date >= dateStr
+  );
+  if (!active.length) return null;
+  // Latest override wins if multiple
+  active.sort((a,b) => b.created_at.localeCompare(a.created_at));
+  return { morning: active[0].morning_qty, evening: active[0].evening_qty, reason: active[0].reason };
+}
+
+// ── INLINE PAUSE EDITING ──
+async function savePauseDates(custId) {
+  const pf = document.getElementById('pf-'+custId).value || null;
+  const pr = document.getElementById('pr-'+custId).value || null;
+  if (pf && pr && pr < pf) return toast('Resume date must be after pause date','error');
+  const c = customers.find(x => x.id === custId);
+  if (!c) return;
+  const newStatus = autoStatus(c.status||'Active', pf, pr);
+  try {
+    await db.update('gs_customers', custId, { pause_from: pf, pause_resume: pr, status: newStatus });
+    const i = customers.findIndex(x => x.id === custId);
+    if (i !== -1) customers[i] = { ...customers[i], pause_from: pf, pause_resume: pr, status: newStatus };
+    toast('Pause dates updated','success');
+    renderRoutes();
+  } catch(e) { toast('Error: '+e.message,'error'); }
+}
+
+async function clearPause(custId) {
+  const c = customers.find(x => x.id === custId);
+  if (!c) return;
+  try {
+    await db.update('gs_customers', custId, { pause_from: null, pause_resume: null, status: 'Active' });
+    const i = customers.findIndex(x => x.id === custId);
+    if (i !== -1) customers[i] = { ...customers[i], pause_from: null, pause_resume: null, status: 'Active' };
+    toast('Pause cleared -- customer set to Active','success');
+    renderRoutes();
+  } catch(e) { toast('Error: '+e.message,'error'); }
+}
+
+// ══════════════════════════════════════
+// WALLET MODULE -- Phase 2B
+// ══════════════════════════════════════
+
+let walletSearch = '', walletFilterStatus = '', walletCustId = null;
+
+// Get wallet for a customer (or default 0)
+function getWallet(custId) {
+  return wallets.find(w => String(w.customer_id)===String(custId)) || { balance: 0, last_topup_date: null, last_topup_amount: null };
+}
+
+// Current rate -- looks up rate valid for a given date
+function getRateForDate(dateStr) {
+  const applicable = rates.filter(r => r.effective_from <= dateStr).sort((a,b) => b.effective_from.localeCompare(a.effective_from));
+  return applicable.length ? applicable[0].rate_per_litre : (rates.length ? rates[0].rate_per_litre : 0);
+}
+
+// Days of supply remaining at current quota and rate
+function daysRemaining(custId) {
+  const w = getWallet(custId);
+  const c = customers.find(x => x.id === custId);
+  if (!c) return 0;
+  const rate = getRateForDate(todayStr());
+  const dailyCost = ((c.morning_quota||0) + (c.evening_quota||0)) * rate;
+  if (!dailyCost) return 999;
+  return Math.max(0, Math.floor(w.balance / dailyCost));
+}
+
+function daysPillHtml(days) {
+  const cls = days >= 7 ? 'good' : days >= 3 ? 'low' : 'zero';
+  return `<span class="days-pill ${cls}">${days === 999 ? '∞' : days} day${days===1?'':'s'}</span>`;
+}
+
+function balanceColor(balance) {
+  if (balance > 0) return 'positive';
+  if (balance === 0) return 'zero';
+  return 'zero';
+}
+
+// ── RENDER WALLET PAGE ──
+// ── NOTIONAL BALANCE (after today's delivery) ──
+function notionalBalance(c) {
+  const today = todayStr();
+  const w = getWallet(c.id);
+  const bal = w.balance || 0;
+  // If paused today -- no deduction
+  if (isOnPause(c, today)) return { bal, deduct: 0, note: 'Paused -- no deduction', status: c.status };
+  // If not a delivery day for custom schedule
+  if (!isDeliveryDay(c, today)) return { bal, deduct: 0, note: 'Not a delivery day', status: c.status };
+  // Get effective qty (override if exists)
+  const rate = getRateForDate(today);
+  const ov = getEffectiveQty(c.id, today);
+  const mq = ov ? ov.morning : (c.morning_quota || 0);
+  const eq = ov ? ov.evening : (c.evening_quota || 0);
+  const deduct = (mq + eq) * rate;
+  const notional = bal - deduct;
+  // Determine notional status
+  const graceDays = c.grace_days || 3;
+  let status;
+  if (c.status === 'Stopped') status = 'Stopped';
+  else if (notional > 0) status = 'Active';
+  else if (notional <= 0 && c.status === 'Grace') status = 'Grace';
+  else if (notional <= 0 && graceDays > 0) status = 'Grace';
+  else status = 'Stopped';
+  return { bal: notional, deduct, mq, eq, note: '', status, hasOverride: !!ov };
+}
+
+function notionalStatusBadge(ns) {
+  if (ns.note) return '<span style="font-size:11px;color:var(--text-hint)">'+ns.note+'</span>';
+  var balStr = ns.bal >= 0 ? 'Rs.'+ns.bal.toFixed(0) : '-Rs.'+Math.abs(ns.bal).toFixed(0);
+  var color = ns.bal > 0 ? 'var(--brand)' : ns.bal === 0 ? 'var(--accent)' : 'var(--danger)';
+  var statusBadge = '';
+  if (ns.status === 'Grace') statusBadge = ' <span class="badge badge-Grace">Grace</span>';
+  else if (ns.status === 'Stopped') statusBadge = ' <span class="badge badge-Stopped">Stopped</span>';
+  var ovNote = ns.hasOverride ? '<div class="td-sub" style="color:#0C447C">Override qty active</div>' : '';
+  return '<div style="font-weight:700;color:'+color+'">'+balStr+'</div>'
+    + '<div class="td-sub">- Rs.'+ns.deduct.toFixed(0)+' ('+ns.mq+'L+'+ns.eq+'L)</div>'
+    + ovNote + statusBadge;
+}
+
+function renderWallet() {
+  const today = todayStr();
+  const curRate = getRateForDate(today);
+  const totalBalance = wallets.reduce((s,w) => s + (w.balance||0), 0);
+  const lowBalance = customers.filter(c => { const d=daysRemaining(c.id); return d<3&&d>=0&&c.status==='Active'; }).length;
+  const zeroBalance = customers.filter(c => getWallet(c.id).balance<=0&&c.status==='Active').length;
+  const totalTopupsThisMonth = topups.filter(t => t.topup_date&&t.topup_date.startsWith(today.slice(0,7))).reduce((s,t)=>s+(t.amount||0),0);
+
+  let list = customers.filter(c => {
+    const name = (c.first_name+' '+c.last_name+' '+(c.customer_code||'')).toLowerCase();
+    const w = getWallet(c.id);
+    const days = daysRemaining(c.id);
+    const ok1 = !walletSearch || name.includes(walletSearch.toLowerCase()) || (c.phone||'').includes(walletSearch);
+    const ok2 = !walletFilterStatus
+      || (walletFilterStatus==='low' && days<3 && days>0)
+      || (walletFilterStatus==='zero' && w.balance<=0)
+      || (walletFilterStatus==='grace' && c.status==='Grace')
+      || (walletFilterStatus==='healthy' && days>=7);
+    return ok1 && ok2;
+  }).sort((a,b) => daysRemaining(a.id)-daysRemaining(b.id));
+
+  let rows = '';
+  list.forEach(c => {
+    const w = getWallet(c.id);
+    const days = daysRemaining(c.id);
+    const dailyCost = ((c.morning_quota||0)+(c.evening_quota||0)) * curRate;
+    const lastTopup = topups.find(t => String(t.customer_id)===String(c.id));
+    const balColor = w.balance>200 ? 'var(--brand)' : w.balance>0 ? 'var(--accent)' : 'var(--danger)';
+    const lastTopupHtml = lastTopup
+      ? '<div style="font-size:12px">Rs.'+lastTopup.amount+' &middot; '+fmtDate(lastTopup.topup_date)+'</div><div class="td-sub">'+esc(lastTopup.payment_mode||'')+'</div>'
+      : '<span style="color:var(--text-hint);font-size:12px">No top-ups yet</span>';
+    var ns = notionalBalance(c);
+    rows += '<tr>'
+      + '<td><div class="td-primary">'+esc(c.first_name||'')+' '+esc(c.last_name||'')+'</div><div class="td-sub">'+esc(c.customer_code||'')+' &middot; '+esc(c.phone||'')+'</div></td>'
+      + '<td>'
+      + '<div style="font-size:16px;font-weight:700;color:'+balColor+'">Rs.'+((w.balance||0)).toFixed(0)+'</div>'
+      + '<div class="td-sub">'+(dailyCost?'Rs.'+dailyCost.toFixed(0)+'/day':'No quota')+'</div>'
+      + ((w.balance||0)<0 ? '<div style="font-size:11px;font-weight:700;color:var(--danger);margin-top:2px">Overdue: Rs.'+Math.abs(w.balance||0).toFixed(0)+'</div>' : '')
+      + '</td>'
+      + '<td>'+notionalStatusBadge(ns)+'</td>'
+      + '<td>'+daysPillHtml(days)+'</td>'
+      + '<td><span class="badge badge-'+(c.status||'Active')+'">'+(c.status||'Active')+'</span></td>'
+      + '<td>'+lastTopupHtml+'</td>'
+      + '<td><div class="acts"><button class="btn btn-primary btn-xs" onclick="openTopup('+c.id+')">Top-up</button> <button class="btn btn-outline btn-xs" onclick="openWalletDetail('+c.id+')">History</button></div></td>'
+      + '</tr>';
+  });
+
+  const filterOpts = '<option value="">All Customers</option>'
+    + '<option value="zero"'+(walletFilterStatus==='zero'?' selected':'')+'>Zero / Negative Balance</option>'
+    + '<option value="low"'+(walletFilterStatus==='low'?' selected':'')+'>Low Balance (under 3 days)</option>'
+    + '<option value="grace"'+(walletFilterStatus==='grace'?' selected':'')+'>Grace Period</option>'
+    + '<option value="healthy"'+(walletFilterStatus==='healthy'?' selected':'')+'>Healthy (over 7 days)</option>';
+
+  const tableHtml = list.length===0
+    ? '<div class="empty"><div class="empty-icon">&#x1F4B0;</div><p>No customers match the filter.</p></div>'
+    : '<div class="tbl-wrap"><table><thead><tr><th>Customer</th><th>Current Balance</th><th>After Delivery</th><th>Days Left</th><th>Status</th><th>Last Top-up</th><th>Actions</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+
+  let html = '';
+  html += '<div class="wallet-grid">';
+  html += '<div class="wallet-stat"><div class="wallet-stat-label">Total Wallet Balance</div><div class="wallet-stat-val" style="color:var(--brand)">Rs.'+totalBalance.toFixed(0)+'</div><div class="td-sub" style="margin-top:4px">Across all customers</div></div>';
+  html += '<div class="wallet-stat"><div class="wallet-stat-label">Collections This Month</div><div class="wallet-stat-val" style="color:var(--brand-mid)">Rs.'+totalTopupsThisMonth.toFixed(0)+'</div><div class="td-sub" style="margin-top:4px">'+today.slice(0,7)+'</div></div>';
+  var willHitGrace = customers.filter(function(c){ var ns=notionalBalance(c); return ns.status==='Grace' && c.status==='Active'; }).length;
+  var willStop = customers.filter(function(c){ var ns=notionalBalance(c); return ns.status==='Stopped' && c.status!=='Stopped'; }).length;
+  html += '<div class="wallet-stat"><div class="wallet-stat-label">Attention Needed</div><div class="wallet-stat-val" style="color:var(--danger)">'+zeroBalance+'</div><div class="td-sub" style="margin-top:4px">Zero balance &middot; '+lowBalance+' low</div></div>';
+  html += '<div class="wallet-stat"><div class="wallet-stat-label">After Delivery</div><div class="wallet-stat-val" style="color:'+(willHitGrace+willStop>0?'var(--danger)':'var(--brand)')+'">'+( willHitGrace+willStop)+'</div><div class="td-sub" style="margin-top:4px">'+willHitGrace+' entering grace &middot; '+willStop+' stopping</div></div>';
+  html += '</div>';
+  html += '<div class="card">';
+  html += '<div class="card-header"><div class="card-title">Customer Wallets</div><div style="font-size:12px;color:var(--text-muted)">Rs.'+curRate+'/L current rate &middot; sorted by urgency</div></div>';
+  html += '<div class="wlt-search"><div class="search-wrap" style="flex:1"><span class="si">&#x1F50D;</span><input placeholder="Search name, code, phone..." value="'+walletSearch+'" oninput="walletSearch=this.value;renderWallet()"></div>';
+  html += '<select class="flt" onchange="walletFilterStatus=this.value;renderWallet()">'+filterOpts+'</select></div>';
+  html += tableHtml;
+  html += '<div class="pager"><div class="pager-info">Showing '+list.length+' of '+customers.length+' customers</div><button class="btn btn-outline btn-sm" onclick="exportWalletCSV()">Export CSV</button></div>';
+  html += '</div>';
+  document.getElementById('content').innerHTML = html;
+}
+
+// ── WALLET DETAIL (top-up history per customer) ──
+function openWalletDetail(custId) {
+  walletCustId = custId;
+  const c = customers.find(x => x.id === custId);
+  if (!c) return;
+  const w = getWallet(custId);
+  const days = daysRemaining(custId);
+  const rate = getRateForDate(todayStr());
+  const dailyCost = ((c.morning_quota||0)+(c.evening_quota||0)) * rate;
+  const custTopups = topups.filter(t => String(t.customer_id)===String(custId));
+  const heroClass = w.balance > 0 ? 'positive' : 'zero';
+  const overdueAmt = w.balance < 0 ? Math.abs(w.balance) : 0;
+
+  const histRows = custTopups.length === 0
+    ? '<div class="empty"><div class="empty-icon">&#x1F4B0;</div><p>No top-ups recorded yet.</p></div>'
+    : custTopups.map(function(t) {
+        const isOpeningBal = t.recorded_by === 'Opening Balance';
+        return '<div class="topup-row">'
+          + '<div class="topup-icon">Rs.</div>'
+          + '<div class="topup-info">'
+          + '<div class="topup-amount">+Rs.'+t.amount+'</div>'
+          + '<div class="topup-meta">'
+          + fmtDate(t.topup_date)+' &middot; '
+          + '<span class="mode-badge">'+esc(t.payment_mode||'Cash')+'</span>'
+          + (t.reference_no ? ' &middot; Ref: '+esc(t.reference_no) : '')
+          + (t.recorded_by ? ' &middot; by '+esc(t.recorded_by) : '')
+          + (t.notes ? ' &middot; '+esc(t.notes) : '')
+          + '</div></div>'
+          + '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">'
+          + '<div style="font-size:11px;color:var(--text-hint)">'+fmtDate(t.created_at)+'</div>'
+          + (!isOpeningBal ? '<div class="acts">'
+            + '<button class="btn btn-outline btn-xs" onclick="openEditTopup('+t.id+','+custId+')">Edit</button>'
+            + '<button class="btn btn-danger btn-xs" onclick="deleteTopup('+t.id+','+custId+')">Delete</button>'
+            + '</div>' : '<div style="font-size:10px;color:var(--text-hint)">Opening balance</div>')
+          + '</div>'
+          + '</div>';
+      }).join('');
+
+  document.getElementById('content').innerHTML = `
+    <div style="margin-bottom:16px">
+      <button class="btn btn-outline btn-sm" onclick="renderWallet()">← Back to Wallets</button>
+    </div>
+    <div class="wallet-hero ${heroClass}">
+      <div>
+        <div class="wallet-label">Current Balance -- ${esc(c.first_name)} ${esc(c.last_name)}</div>
+        <div class="wallet-bal">Rs.${(w.balance||0).toFixed(0)}</div>
+        <div class="wallet-sub">
+          ${dailyCost ? `Rs.${dailyCost.toFixed(0)}/day · ` : ''}
+          ${days === 999 ? 'No quota set' : days + ' days remaining'}
+          ${w.last_topup_date ? ` · Last top-up Rs.${w.last_topup_amount} on ${fmtDate(w.last_topup_date)}` : ''}
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px">
+        ${overdueAmt > 0 ? '<div style="background:rgba(255,255,255,0.2);border-radius:8px;padding:6px 14px;font-size:13px;font-weight:700">OVERDUE: Rs.'+overdueAmt.toFixed(0)+'</div>' : ''}
+        <button class="btn" style="background:rgba(255,255,255,0.2);color:#fff;border:1px solid rgba(255,255,255,0.3)" onclick="openTopup(${custId})">+ Record Top-up</button>
+      </div>
+    </div>
+    <div class="wallet-grid">
+      <div class="wallet-stat">
+        <div class="wallet-stat-label">Total Topped Up</div>
+        <div class="wallet-stat-val" style="color:var(--brand)">Rs.${custTopups.reduce((s,t)=>s+(t.amount||0),0).toFixed(0)}</div>
+        <div class="td-sub" style="margin-top:4px">${custTopups.length} payment${custTopups.length!==1?'s':''}</div>
+      </div>
+      <div class="wallet-stat">
+        <div class="wallet-stat-label">Daily Cost</div>
+        <div class="wallet-stat-val">Rs.${dailyCost.toFixed(0)}</div>
+        <div class="td-sub" style="margin-top:4px">${(c.morning_quota||0)+(c.evening_quota||0)}L × Rs.${rate}/L</div>
+      </div>
+      <div class="wallet-stat">
+        <div class="wallet-stat-label">Days Remaining</div>
+        <div class="wallet-stat-val" style="color:${days<3?'var(--danger)':days<7?'var(--accent)':'var(--brand)'}">${days===999?'∞':days}</div>
+        <div class="td-sub" style="margin-top:4px">at current usage</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">Top-up History</div>
+        <div style="font-size:12px;color:var(--text-muted)">${custTopups.length} records</div>
+      </div>
+      ${histRows}
+    </div>`;
+}
+
+// ── EDIT / DELETE TOP-UP ──
+let editingTopupId = null;
+let editingTopupCustId = null;
+let editingTopupOldAmount = 0;
+
+function openEditTopup(topupId, custId) {
+  const t = topups.find(x => x.id === topupId);
+  if (!t) return;
+  editingTopupId = topupId;
+  editingTopupCustId = custId;
+  editingTopupOldAmount = t.amount || 0;
+  document.getElementById('etp-amount').value = t.amount || '';
+  document.getElementById('etp-date').value = t.topup_date || '';
+  document.getElementById('etp-mode').value = t.payment_mode || 'Cash';
+  document.getElementById('etp-ref').value = t.reference_no || '';
+  document.getElementById('etp-by').value = t.recorded_by || '';
+  document.getElementById('etp-notes').value = t.notes || '';
+  openM('edit-topup-modal');
+}
+
+async function saveEditTopup() {
+  const newAmount = parseFloat(document.getElementById('etp-amount').value);
+  const date = document.getElementById('etp-date').value;
+  if (!newAmount || newAmount <= 0) return toast('Please enter a valid amount', 'error');
+  if (!date) return toast('Payment date is required', 'error');
+  const diff = newAmount - editingTopupOldAmount;
+  try {
+    await db.update('gs_topups', editingTopupId, {
+      amount: newAmount,
+      topup_date: date,
+      payment_mode: document.getElementById('etp-mode').value,
+      reference_no: document.getElementById('etp-ref').value || null,
+      recorded_by: document.getElementById('etp-by').value || null,
+      notes: document.getElementById('etp-notes').value || null
+    });
+    // Update local topups
+    const ti = topups.findIndex(x => x.id === editingTopupId);
+    if (ti !== -1) {
+      topups[ti].amount = newAmount;
+      topups[ti].topup_date = date;
+      topups[ti].payment_mode = document.getElementById('etp-mode').value;
+    }
+    // Adjust wallet balance by the difference
+    const w = wallets.find(x => String(x.customer_id)===String(editingTopupCustId));
+    if (w) {
+      const newBal = (w.balance || 0) + diff;
+      await db.update('gs_wallets', w.id, { balance: newBal });
+      w.balance = newBal;
+    }
+    toast('Top-up updated. Balance adjusted by Rs.' + (diff >= 0 ? '+' : '') + diff.toFixed(0), 'success');
+    closeM('edit-topup-modal');
+    openWalletDetail(editingTopupCustId);
+  } catch(e) { toast('Error: ' + e.message, 'error'); }
+}
+
+async function deleteTopup(topupId, custId) {
+  const t = topups.find(x => x.id === topupId);
+  if (!t) return;
+  if (!confirm('Delete this Rs.' + t.amount + ' top-up? Wallet balance will be reduced by this amount.')) return;
+  try {
+    await db.del('gs_topups', topupId);
+    topups = topups.filter(x => x.id !== topupId);
+    // Reduce wallet balance
+    const w = wallets.find(x => String(x.customer_id)===String(custId));
+    if (w) {
+      const newBal = (w.balance || 0) - (t.amount || 0);
+      await db.update('gs_wallets', w.id, { balance: newBal });
+      w.balance = newBal;
+    }
+    toast('Top-up deleted. Balance reduced by Rs.' + t.amount, 'success');
+    openWalletDetail(custId);
+  } catch(e) { toast('Error: ' + e.message, 'error'); }
+}
+
+// ── TOP-UP MODAL ──
+function openTopup(custId) {
+  walletCustId = custId;
+  const c = customers.find(x => x.id === custId);
+  if (!c) return;
+  const w = getWallet(custId);
+  const days = daysRemaining(custId);
+  document.getElementById('topup-modal-title').textContent = `Top-up -- ${c.first_name} ${c.last_name}`;
+  document.getElementById('topup-customer-info').innerHTML =
+    `Current balance: <strong>Rs.${(w.balance||0).toFixed(0)}</strong> · ${daysPillHtml(days)} remaining · <strong>${(c.morning_quota||0)+(c.evening_quota||0)}L/day</strong>`;
+  document.getElementById('tp-amount').value = '';
+  document.getElementById('tp-date').value = todayStr();
+  document.getElementById('tp-mode').value = c.payment_mode || 'Cash';
+  document.getElementById('tp-ref').value = '';
+  document.getElementById('tp-by').value = '';
+  document.getElementById('tp-notes').value = '';
+  openM('topup-modal');
+}
+
+async function saveTopup() {
+  const amount = parseFloat(document.getElementById('tp-amount').value);
+  const date   = document.getElementById('tp-date').value;
+  if (!amount || amount <= 0) return toast('Please enter a valid amount','error');
+  if (!date) return toast('Payment date is required','error');
+
+  const topupData = {
+    customer_id:  walletCustId,
+    amount,
+    payment_mode: document.getElementById('tp-mode').value,
+    reference_no: document.getElementById('tp-ref').value  || null,
+    recorded_by:  document.getElementById('tp-by').value   || null,
+    notes:        document.getElementById('tp-notes').value || null,
+    topup_date:   date
+  };
+
+  try {
+    // Insert topup record
+    const res = await db.insert('gs_topups', topupData);
+    topups.unshift(res[0]);
+
+    // Update or create wallet balance
+    const existing = wallets.find(w => String(w.customer_id)===String(walletCustId));
+    if (existing) {
+      const newBal = (existing.balance||0) + amount;
+      await db.update('gs_wallets', existing.id, {
+        balance: newBal,
+        last_topup_date: date,
+        last_topup_amount: amount,
+        updated_at: new Date().toISOString()
+      });
+      existing.balance = newBal;
+      existing.last_topup_date = date;
+      existing.last_topup_amount = amount;
+    } else {
+      const wRes = await db.insert('gs_wallets', {
+        customer_id: walletCustId,
+        balance: amount,
+        last_topup_date: date,
+        last_topup_amount: amount
+      });
+      wallets.push(wRes[0]);
+    }
+
+    // Auto-resume if customer was Stopped due to balance
+    const c = customers.find(x => x.id === walletCustId);
+    if (c && c.status === 'Stopped') {
+      await db.update('gs_customers', walletCustId, { status: 'Active' });
+      const i = customers.findIndex(x => x.id === walletCustId);
+      if (i !== -1) customers[i].status = 'Active';
+      toast(`Rs.${amount} top-up recorded -- supply resumed!`, 'success');
+    } else {
+      toast(`Rs.${amount} top-up recorded successfully`, 'success');
+    }
+
+    closeM('topup-modal');
+    // Refresh current view
+    if (walletCustId && document.getElementById('content').innerHTML.includes('Back to Wallets')) {
+      openWalletDetail(walletCustId);
+    } else {
+      renderWallet();
+    }
+  } catch(e) { toast('Error: '+e.message,'error'); }
+}
+
+// ── WALLET EXPORT ──
+function exportWalletCSV() {
+  var today = todayStr();
+  var rate = getRateForDate(today);
+  var hdr = ['Code','Customer','Phone','Route','Balance(Rs)','DailyCost(Rs)','DaysLeft','Status','LastTopupDate','LastTopupAmt','PayMode'];
+  var allRows = [hdr];
+  customers.forEach(function(c) {
+    var w = getWallet(c.id);
+    var rt = routes.find(function(r){ return r.id===c.route_id; });
+    var days = daysRemaining(c.id);
+    var cost = ((c.morning_quota||0)+(c.evening_quota||0)) * rate;
+    var name = ((c.first_name||'')+' '+(c.last_name||'')).trim();
+    allRows.push([c.customer_code||'', name, c.phone||'', rt?rt.name:'', (w.balance||0).toFixed(0), cost.toFixed(0), days===999?'many':days, c.status||'', w.last_topup_date||'', w.last_topup_amount||'', c.payment_mode||'']);
+  });
+  var csvLines = allRows.map(function(row){
+    return row.map(function(cell){ return '"'+String(cell).replace(/"/g, '""')+'"'; }).join(',');
+  });
+  var blob = new Blob([csvLines.join(String.fromCharCode(13,10))], {type:'text/csv'});
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'gauras-wallets.csv';
+  a.click();
+}
+
+// ── HELPERS ──
+const v   = id => (document.getElementById(id)||{}).value||'';
+const esc = s  => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+function fmtDate(d) {
+  if(!d) return '--';
+  const dt=new Date(d);
+  return isNaN(dt.getTime())?d:dt.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+}
+function openM(id)  { document.getElementById(id).classList.add('open'); }
+function closeM(id) { document.getElementById(id).classList.remove('open'); }
+document.querySelectorAll('.backdrop').forEach(b=>b.addEventListener('click',e=>{if(e.target===b)b.classList.remove('open');}));
+function toast(msg,type='info') {
+  const el=document.createElement('div');
+  el.className=`toast toast-${type}`;
+  el.innerHTML=`<span>${type==='success'?'✓':type==='error'?'✗':'ℹ'}</span> ${msg}`;
+  document.getElementById('toasts').appendChild(el);
+  setTimeout(()=>el.remove(),3200);
+}
+
+// Live pause info update
+['pm-from','pm-to'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('change', updatePauseModalStatus);
+});
+
+boot();
+</script>
+</body>
+</html>
