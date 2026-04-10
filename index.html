@@ -2255,127 +2255,127 @@ async function submitAllRoute() {
 
 let seqRouteId = null;
 let seqCustomers = [];
-let dragSrcIdx = null;
 const DAY_SHORT = ['Su','Mo','Tu','We','Th','Fr','Sa'];
 
 function openSequencer(routeId) {
   seqRouteId = routeId;
-  // Get customers for this route sorted by sequence
   seqCustomers = customers
     .filter(function(c) { return String(c.route_id)===String(routeId); })
     .sort(function(a,b) { return (a.delivery_sequence||999)-(b.delivery_sequence||999); });
-
-  // Auto-assign sequence if not set
   var hasSeq = seqCustomers.some(function(c) { return c.delivery_sequence && c.delivery_sequence < 999; });
-  if (!hasSeq) {
-    seqCustomers.forEach(function(c,i) { c.delivery_sequence = i+1; });
-  }
-
-  renderSequencer();
+  if (!hasSeq) seqCustomers.forEach(function(c,i) { c.delivery_sequence = i+1; });
+  buildSeqPanel();
 }
 
-function renderSequencer() {
+function buildSeqPanel() {
   var route = routes.find(function(r) { return String(r.id)===String(seqRouteId); });
   var today = todayStr();
   var todayDow = new Date(today).getDay();
 
-  var rows = seqCustomers.map(function(c, i) {
+  // Create or find panel
+  var panel = document.getElementById('seq-panel');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.className = 'seq-panel';
+    panel.id = 'seq-panel';
+    document.getElementById('content').appendChild(panel);
+  }
+
+  // Build header
+  panel.innerHTML = '<div class="seq-panel-header">'
+    + '<div><div style="font-weight:700;font-size:14px">Delivery Sequence -- '+esc(route?route.name:'')+'</div>'
+    + '<div style="font-size:12px;color:var(--text-muted);margin-top:2px">Use ▲▼ buttons or type a number. Greyed = not delivering today.</div></div>'
+    + '<div style="display:flex;gap:8px">'
+    + '<button class="btn btn-outline btn-sm" id="seq-close-btn">Close</button>'
+    + '<button class="btn btn-primary btn-sm" id="seq-save-btn">Save Order</button>'
+    + '</div></div>'
+    + '<div id="seq-list"></div>';
+
+  document.getElementById('seq-close-btn').onclick = closeSeqPanel;
+  document.getElementById('seq-save-btn').onclick = saveSequence;
+
+  // Build rows
+  var list = document.getElementById('seq-list');
+  list.innerHTML = '';
+  seqCustomers.forEach(function(c, i) {
     var schedType = c.schedule_type || 'Daily';
     var schedDays = schedType==='Custom' ? (c.schedule_days||'').split(',').map(Number) : [0,1,2,3,4,5,6];
     var deliversToday = schedType==='Daily' || schedDays.indexOf(todayDow)!==-1;
     var isSkipped = isOnPause(c, today) || !deliversToday;
 
-    var dayDots = DAY_SHORT.map(function(d,idx) {
-      var isActive = schedType==='Daily' || schedDays.indexOf(idx)!==-1;
+    var dayDots = DAY_SHORT.map(function(d,didx) {
+      var isActive = schedType==='Daily' || schedDays.indexOf(didx)!==-1;
       return '<div class="seq-day'+(isActive?' active-day':'')+'" title="'+d+'">'+d.charAt(0)+'</div>';
     }).join('');
 
-    return '<div class="seq-row'+(isSkipped?' skipped-day':'')+'" draggable="true" '
-      + 'ondragstart="seqDragStart('+i+')" '
-      + 'ondragover="seqDragOver(event,'+i+')" '
-      + 'ondrop="seqDrop(event,'+i+')" '
-      + 'ondragend="seqDragEnd()" '
-      + 'id="seq-row-'+i+'">'
-      + '<div style="display:flex;flex-direction:column;gap:2px;flex-shrink:0">'
-      + '<button onclick="seqMoveUp('+i+')" style="padding:2px 7px;border:1px solid var(--border);border-radius:4px;background:var(--bg);cursor:pointer;font-size:12px;line-height:1" '+(i===0?'disabled':'')+'>▲</button>'
-      + '<button onclick="seqMoveDown('+i+')" style="padding:2px 7px;border:1px solid var(--border);border-radius:4px;background:var(--bg);cursor:pointer;font-size:12px;line-height:1" '+(i===seqCustomers.length-1?'disabled':'')+'>▼</button>'
-      + '</div>'
-      + '<span class="seq-handle" title="Drag to reorder">&#9776;</span>'
-      + '<input class="seq-num" type="number" min="1" value="'+Math.round(c.delivery_sequence||i+1)+'" '
-      + 'onchange="seqNumChange('+i+',this.value)" onblur="seqNormalise()">'
-      + '<div class="seq-info">'
-      + '<div class="seq-name">'+esc(c.first_name||'')+' '+esc(c.last_name||'')+'</div>'
-      + '<div class="seq-meta">'+esc(c.customer_code||'')+' &middot; '+(c.morning_quota||0)+'L morn + '+(c.evening_quota||0)+'L eve</div>'
-      + '<div class="seq-days">'+dayDots+'</div>'
-      + '</div>'
-      + (isSkipped ? '<span class="badge badge-Paused" style="font-size:10px">'+(isOnPause(c,today)?'Paused':'Off today')+'</span>' : '')
-      + '</div>';
-  }).join('');
+    var row = document.createElement('div');
+    row.className = 'seq-row' + (isSkipped?' skipped-day':'');
+    row.setAttribute('data-id', c.id);
 
-  // Find or create sequencer panel in content
-  var existing = document.getElementById('seq-panel');
-  if (existing) {
-    existing.innerHTML = seqPanelInner(route, rows);
-  } else {
-    var contentEl = document.getElementById('content');
-    var div = document.createElement('div');
-    div.className = 'seq-panel';
-    div.id = 'seq-panel';
-    div.innerHTML = seqPanelInner(route, rows);
-    contentEl.appendChild(div);
-  }
-  // Scroll to sequencer
-  document.getElementById('seq-panel').scrollIntoView({behavior:'smooth'});
+    // Up button
+    var btnUp = document.createElement('button');
+    btnUp.textContent = '▲';
+    btnUp.disabled = (i === 0);
+    btnUp.style.cssText = 'padding:4px 10px;border:1px solid var(--border);border-radius:4px;background:var(--bg);cursor:pointer;font-size:13px;line-height:1;margin-right:2px';
+    btnUp.onclick = (function(idx){ return function(e){ e.stopPropagation(); seqMove(idx, -1); }; })(i);
+
+    // Down button
+    var btnDown = document.createElement('button');
+    btnDown.textContent = '▼';
+    btnDown.disabled = (i === seqCustomers.length-1);
+    btnDown.style.cssText = 'padding:4px 10px;border:1px solid var(--border);border-radius:4px;background:var(--bg);cursor:pointer;font-size:13px;line-height:1';
+    btnDown.onclick = (function(idx){ return function(e){ e.stopPropagation(); seqMove(idx, 1); }; })(i);
+
+    // Buttons wrapper
+    var btnWrap = document.createElement('div');
+    btnWrap.style.cssText = 'display:flex;gap:4px;flex-shrink:0;align-items:center';
+    btnWrap.appendChild(btnUp);
+    btnWrap.appendChild(btnDown);
+
+    // Number input
+    var numInput = document.createElement('input');
+    numInput.type = 'number';
+    numInput.min = '1';
+    numInput.value = Math.round(c.delivery_sequence||i+1);
+    numInput.className = 'seq-num';
+    numInput.onchange = (function(idx){ return function(){ seqCustomers[idx].delivery_sequence = parseFloat(this.value)||idx+1; }; })(i);
+    numInput.onblur = function() { seqNormalise(); buildSeqPanel(); };
+
+    // Info
+    var info = document.createElement('div');
+    info.className = 'seq-info';
+    info.innerHTML = '<div class="seq-name">'+esc(c.first_name||'')+' '+esc(c.last_name||'')+'</div>'
+      + '<div class="seq-meta">'+esc(c.customer_code||'')+' &middot; '+(c.morning_quota||0)+'L+'+(c.evening_quota||0)+'L eve</div>'
+      + '<div class="seq-days">'+dayDots+'</div>';
+
+    row.appendChild(btnWrap);
+    row.appendChild(numInput);
+    row.appendChild(info);
+
+    if (isSkipped) {
+      var badge = document.createElement('span');
+      badge.className = 'badge badge-Paused';
+      badge.style.fontSize = '10px';
+      badge.textContent = isOnPause(c,today) ? 'Paused' : 'Off today';
+      row.appendChild(badge);
+    }
+
+    list.appendChild(row);
+  });
+
+  panel.scrollIntoView({behavior:'smooth'});
 }
 
-function seqPanelInner(route, rows) {
-  return '<div class="seq-panel-header">'
-    + '<div><div style="font-weight:700;font-size:14px">Delivery Sequence -- '+esc(route?route.name:'')+'</div>'
-    + '<div style="font-size:12px;color:var(--text-muted);margin-top:2px">Use arrows or type a number. Greyed = not delivering today.</div></div>'
-    + '<div style="display:flex;gap:8px">'
-    + '<button class="btn btn-outline btn-sm" onclick="closeSeqPanel()">Close</button>'
-    + '<button class="btn btn-primary btn-sm" onclick="saveSequence()">Save Order</button>'
-    + '</div></div>'
-    + rows;
-}
-
-// Drag and drop
-function seqDragStart(idx) { dragSrcIdx = idx; document.getElementById('seq-row-'+idx).classList.add('dragging'); }
-function seqDragEnd() { document.querySelectorAll('.seq-row').forEach(function(r){ r.classList.remove('dragging','drag-over'); }); }
-function seqDragOver(e, idx) { e.preventDefault(); document.querySelectorAll('.seq-row').forEach(function(r){ r.classList.remove('drag-over'); }); document.getElementById('seq-row-'+idx).classList.add('drag-over'); }
-function seqDrop(e, idx) {
-  e.preventDefault();
-  if (dragSrcIdx === null || dragSrcIdx === idx) return;
-  var moved = seqCustomers.splice(dragSrcIdx, 1)[0];
-  seqCustomers.splice(idx, 0, moved);
-  seqNormalise();
-  renderSequencer();
-}
-
-// Move up/down buttons
-function seqMoveUp(idx) {
-  if (idx === 0) return;
+function seqMove(idx, dir) {
+  var newIdx = idx + dir;
+  if (newIdx < 0 || newIdx >= seqCustomers.length) return;
   var tmp = seqCustomers[idx];
-  seqCustomers[idx] = seqCustomers[idx-1];
-  seqCustomers[idx-1] = tmp;
+  seqCustomers[idx] = seqCustomers[newIdx];
+  seqCustomers[newIdx] = tmp;
   seqNormalise();
-  renderSequencer();
-}
-function seqMoveDown(idx) {
-  if (idx === seqCustomers.length-1) return;
-  var tmp = seqCustomers[idx];
-  seqCustomers[idx] = seqCustomers[idx+1];
-  seqCustomers[idx+1] = tmp;
-  seqNormalise();
-  renderSequencer();
+  buildSeqPanel();
 }
 
-// Number input change
-function seqNumChange(idx, val) {
-  seqCustomers[idx].delivery_sequence = parseFloat(val) || idx+1;
-}
-
-// Normalise all sequence numbers to whole integers 1,2,3...
 function seqNormalise() {
   seqCustomers.sort(function(a,b) { return (a.delivery_sequence||999)-(b.delivery_sequence||999); });
   seqCustomers.forEach(function(c,i) { c.delivery_sequence = i+1; });
@@ -2383,7 +2383,6 @@ function seqNormalise() {
 
 function closeSeqPanel() { var p=document.getElementById('seq-panel'); if(p) p.remove(); }
 
-// Save sequence to Supabase
 async function saveSequence() {
   seqNormalise();
   try {
@@ -2394,7 +2393,7 @@ async function saveSequence() {
       if (ci!==-1) customers[ci].delivery_sequence = c.delivery_sequence;
     }
     toast('Delivery sequence saved for '+seqCustomers.length+' customers', 'success');
-    document.getElementById('seq-panel').remove();
+    closeSeqPanel();
   } catch(e) { toast('Error: '+e.message, 'error'); }
 }
 
