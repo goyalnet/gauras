@@ -2084,7 +2084,7 @@ function renderDelivery() {
   html += '<button class="del-session-btn'+(deliverySession==='Morning'?' active':'')+'" onclick="deliverySession=\'Morning\';renderDelivery()">Morning</button>';
   html += '<button class="del-session-btn'+(deliverySession==='Evening'?' active':'')+'" onclick="deliverySession=\'Evening\';renderDelivery()">Evening</button>';
   html += '</div>';
-  html += '<select class="del-route-select" style="font-size:12px;padding:6px 10px;color:#fff;background:rgba(255,255,255,0.15);border-color:rgba(255,255,255,0.3)" onchange="deliveryRoute=this.value;renderDelivery()">'+routeOpts+'</select>';
+  html += '<select class="del-route-select" style="font-size:13px;padding:7px 12px;color:var(--text);background:#fff;border:1.5px solid var(--border);border-radius:8px;min-width:180px" onchange="deliveryRoute=this.value;renderDelivery()">'+routeOpts+'</select>';
   html += '</div></div>';
 
   if (total > 0) {
