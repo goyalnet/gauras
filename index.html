@@ -2296,7 +2296,11 @@ function renderSequencer() {
       + 'ondrop="seqDrop(event,'+i+')" '
       + 'ondragend="seqDragEnd()" '
       + 'id="seq-row-'+i+'">'
-      + '<span class="seq-handle">&#9776;</span>'
+      + '<div style="display:flex;flex-direction:column;gap:2px;flex-shrink:0">'
+      + '<button onclick="seqMoveUp('+i+')" style="padding:2px 7px;border:1px solid var(--border);border-radius:4px;background:var(--bg);cursor:pointer;font-size:12px;line-height:1" '+(i===0?'disabled':'')+'>▲</button>'
+      + '<button onclick="seqMoveDown('+i+')" style="padding:2px 7px;border:1px solid var(--border);border-radius:4px;background:var(--bg);cursor:pointer;font-size:12px;line-height:1" '+(i===seqCustomers.length-1?'disabled':'')+'>▼</button>'
+      + '</div>'
+      + '<span class="seq-handle" title="Drag to reorder">&#9776;</span>'
       + '<input class="seq-num" type="number" min="1" value="'+Math.round(c.delivery_sequence||i+1)+'" '
       + 'onchange="seqNumChange('+i+',this.value)" onblur="seqNormalise()">'
       + '<div class="seq-info">'
@@ -2342,6 +2346,24 @@ function seqDrop(e, idx) {
   if (dragSrcIdx === null || dragSrcIdx === idx) return;
   var moved = seqCustomers.splice(dragSrcIdx, 1)[0];
   seqCustomers.splice(idx, 0, moved);
+  seqNormalise();
+  renderSequencer();
+}
+
+// Move up/down buttons
+function seqMoveUp(idx) {
+  if (idx === 0) return;
+  var tmp = seqCustomers[idx];
+  seqCustomers[idx] = seqCustomers[idx-1];
+  seqCustomers[idx-1] = tmp;
+  seqNormalise();
+  renderSequencer();
+}
+function seqMoveDown(idx) {
+  if (idx === seqCustomers.length-1) return;
+  var tmp = seqCustomers[idx];
+  seqCustomers[idx] = seqCustomers[idx+1];
+  seqCustomers[idx+1] = tmp;
   seqNormalise();
   renderSequencer();
 }
