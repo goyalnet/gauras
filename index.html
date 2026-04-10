@@ -157,6 +157,25 @@
   .alert-banner { border-radius: 8px; padding: 12px 16px; font-size: 13px; display: flex; align-items: flex-start; gap: 10px; margin-bottom: 12px; line-height: 1.5; }
   .alert-banner.warn { background: var(--accent-light); color: #633806; border-left: 3px solid var(--accent); }
   .alert-banner.info { background: var(--brand-light); color: var(--brand-dark); border-left: 3px solid var(--brand); }
+  /* SEQUENCE */
+  .seq-panel { background: var(--surface); border-radius: var(--radius); border: 1px solid var(--border); margin-top: 16px; }
+  .seq-panel-header { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .seq-row { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid #eef2f0; cursor: grab; transition: background 0.1s; user-select: none; }
+  .seq-row:last-child { border-bottom: none; }
+  .seq-row:hover { background: #f5faf8; }
+  .seq-row.dragging { opacity: 0.4; }
+  .seq-row.drag-over { border-top: 2px solid var(--brand); }
+  .seq-row.skipped-day { opacity: 0.45; }
+  .seq-handle { color: var(--text-hint); font-size: 16px; cursor: grab; flex-shrink: 0; padding: 0 4px; }
+  .seq-num { width: 48px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; font-weight: 700; text-align: center; font-family: inherit; color: var(--brand-dark); background: var(--brand-light); }
+  .seq-num:focus { outline: none; border-color: var(--brand-mid); }
+  .seq-info { flex: 1; min-width: 0; }
+  .seq-name { font-weight: 600; font-size: 13px; }
+  .seq-meta { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+  .seq-days { display: flex; gap: 3px; margin-top: 3px; }
+  .seq-day { width: 20px; height: 20px; border-radius: 50%; font-size: 9px; font-weight: 700; display: flex; align-items: center; justify-content: center; background: var(--bg); color: var(--text-hint); border: 1px solid var(--border); }
+  .seq-day.active-day { background: var(--brand); color: #fff; border-color: var(--brand); }
+
   /* DELIVERY */
   .del-hero { background: var(--brand-dark); border-radius: var(--radius); padding: 16px 20px; color: #fff; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
   .del-session-btn { padding: 8px 20px; border-radius: 8px; border: 2px solid rgba(255,255,255,0.3); background: transparent; color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.14s; }
@@ -836,8 +855,9 @@ function renderRoutes() {
           <div class="rc-meta"><span>👥 ${cc} customers</span><span>🥛 ${ll.toFixed(1)}L/day</span></div>
           <div class="rc-bar"><div class="rc-bar-fill" style="width:${Math.round(cc/maxC*100)}%"></div></div>
           ${r.notes?`<div style="font-size:11px;color:var(--text-hint);margin-top:8px">${esc(r.notes)}</div>`:''}
-          <div style="display:flex;gap:6px;margin-top:12px">
+          <div style="display:flex;gap:6px;margin-top:12px;flex-wrap:wrap">
             <button class="btn btn-outline btn-sm" style="flex:1" onclick="openEditRoute(${r.id})">✏️ Edit</button>
+            <button class="btn btn-sm" style="background:var(--brand-light);color:var(--brand-dark);flex:1" onclick="openSequencer(${r.id})">⟳ Arrange</button>
             <button class="btn btn-danger btn-sm" onclick="confirmDel('route',${r.id},'${esc(r.name)}')">🗑</button>
           </div>
         </div>`;
@@ -1932,8 +1952,8 @@ function renderDelivery() {
     return '<div class="alert-banner info">Resuming today: <strong>'+esc(c.first_name)+' '+esc(c.last_name)+'</strong> -- include in route.</div>';
   }).join('');
 
-  const routeOpts = '<option value="">-- Select Your Route --</option>'
-    + routes.map(function(r) { return '<option value="'+r.id+'"'+(deliveryRoute==r.id?' selected':'')+'>'+esc(r.name)+'</option>'; }).join('');
+  const routeOpts = '<option value="">-- Select Route --</option>'
+    + routes.map(function(r) { return '<option value="'+r.id+'"'+(String(deliveryRoute)===String(r.id)?' selected':'')+'>'+esc(r.name)+'</option>'; }).join('');
 
   if (!deliveryRoute) {
     document.getElementById('content').innerHTML = resumeHtml
@@ -1942,7 +1962,7 @@ function renderDelivery() {
       + '<div style="font-size:18px;font-weight:700;margin-bottom:8px">Daily Delivery</div>'
       + '<div style="font-size:13px;color:var(--text-muted);margin-bottom:24px">'+dow+', '+todayFmt+'</div>'
       + '<div style="font-size:13px;color:var(--text-muted);margin-bottom:12px">Select your route to begin</div>'
-      + '<select class="del-route-select" onchange="deliveryRoute=this.value;deliveryEntries={};renderDelivery()">'+routeOpts+'</select>'
+      + '<select class="del-route-select" onchange="deliveryRoute=this.value;renderDelivery()">'+routeOpts+'</select>'
       + '</div>';
     return;
   }
@@ -1960,6 +1980,9 @@ function renderDelivery() {
     if (deliverySession === 'Evening' && !(c.evening_quota > 0)) return false;
     return true;
   });
+
+  // Sort by delivery sequence
+  routeCustomers.sort(function(a,b) { return (a.delivery_sequence||999)-(b.delivery_sequence||999); });
 
   // Pre-initialise entries for new customers
   routeCustomers.forEach(function(c) {
@@ -2061,7 +2084,7 @@ function renderDelivery() {
   html += '<button class="del-session-btn'+(deliverySession==='Morning'?' active':'')+'" onclick="deliverySession=\'Morning\';renderDelivery()">Morning</button>';
   html += '<button class="del-session-btn'+(deliverySession==='Evening'?' active':'')+'" onclick="deliverySession=\'Evening\';renderDelivery()">Evening</button>';
   html += '</div>';
-  html += '<select class="del-route-select" style="font-size:12px;padding:6px 10px;color:#fff;background:rgba(255,255,255,0.15);border-color:rgba(255,255,255,0.3)" onchange="deliveryRoute=this.value;deliveryEntries={};renderDelivery()">'+routeOpts+'</select>';
+  html += '<select class="del-route-select" style="font-size:12px;padding:6px 10px;color:#fff;background:rgba(255,255,255,0.15);border-color:rgba(255,255,255,0.3)" onchange="deliveryRoute=this.value;renderDelivery()">'+routeOpts+'</select>';
   html += '</div></div>';
 
   if (total > 0) {
@@ -2224,6 +2247,131 @@ async function submitAllRoute() {
     await saveDeliveryEntry(parseInt(pending[i]));
   }
   toast('Route submitted -- all entries saved!', 'success');
+}
+
+// ══════════════════════════════════════
+// DELIVERY SEQUENCE MODULE
+// ══════════════════════════════════════
+
+let seqRouteId = null;
+let seqCustomers = [];
+let dragSrcIdx = null;
+const DAY_SHORT = ['Su','Mo','Tu','We','Th','Fr','Sa'];
+
+function openSequencer(routeId) {
+  seqRouteId = routeId;
+  // Get customers for this route sorted by sequence
+  seqCustomers = customers
+    .filter(function(c) { return String(c.route_id)===String(routeId); })
+    .sort(function(a,b) { return (a.delivery_sequence||999)-(b.delivery_sequence||999); });
+
+  // Auto-assign sequence if not set
+  var hasSeq = seqCustomers.some(function(c) { return c.delivery_sequence && c.delivery_sequence < 999; });
+  if (!hasSeq) {
+    seqCustomers.forEach(function(c,i) { c.delivery_sequence = i+1; });
+  }
+
+  renderSequencer();
+}
+
+function renderSequencer() {
+  var route = routes.find(function(r) { return String(r.id)===String(seqRouteId); });
+  var today = todayStr();
+  var todayDow = new Date(today).getDay();
+
+  var rows = seqCustomers.map(function(c, i) {
+    var schedType = c.schedule_type || 'Daily';
+    var schedDays = schedType==='Custom' ? (c.schedule_days||'').split(',').map(Number) : [0,1,2,3,4,5,6];
+    var deliversToday = schedType==='Daily' || schedDays.indexOf(todayDow)!==-1;
+    var isSkipped = isOnPause(c, today) || !deliversToday;
+
+    var dayDots = DAY_SHORT.map(function(d,idx) {
+      var isActive = schedType==='Daily' || schedDays.indexOf(idx)!==-1;
+      return '<div class="seq-day'+(isActive?' active-day':'')+'" title="'+d+'">'+d.charAt(0)+'</div>';
+    }).join('');
+
+    return '<div class="seq-row'+(isSkipped?' skipped-day':'')+'" draggable="true" '
+      + 'ondragstart="seqDragStart('+i+')" '
+      + 'ondragover="seqDragOver(event,'+i+')" '
+      + 'ondrop="seqDrop(event,'+i+')" '
+      + 'ondragend="seqDragEnd()" '
+      + 'id="seq-row-'+i+'">'
+      + '<span class="seq-handle">&#9776;</span>'
+      + '<input class="seq-num" type="number" min="1" value="'+Math.round(c.delivery_sequence||i+1)+'" '
+      + 'onchange="seqNumChange('+i+',this.value)" onblur="seqNormalise()">'
+      + '<div class="seq-info">'
+      + '<div class="seq-name">'+esc(c.first_name||'')+' '+esc(c.last_name||'')+'</div>'
+      + '<div class="seq-meta">'+esc(c.customer_code||'')+' &middot; '+(c.morning_quota||0)+'L morn + '+(c.evening_quota||0)+'L eve</div>'
+      + '<div class="seq-days">'+dayDots+'</div>'
+      + '</div>'
+      + (isSkipped ? '<span class="badge badge-Paused" style="font-size:10px">'+(isOnPause(c,today)?'Paused':'Off today')+'</span>' : '')
+      + '</div>';
+  }).join('');
+
+  // Find or create sequencer panel in content
+  var existing = document.getElementById('seq-panel');
+  if (existing) {
+    existing.outerHTML = seqPanelHtml(route, rows);
+  } else {
+    var content = document.getElementById('content');
+    content.insertAdjacentHTML('beforeend', seqPanelHtml(route, rows));
+  }
+  // Scroll to sequencer
+  document.getElementById('seq-panel').scrollIntoView({behavior:'smooth'});
+}
+
+function seqPanelHtml(route, rows) {
+  return '<div class="seq-panel" id="seq-panel">'
+    + '<div class="seq-panel-header">'
+    + '<div><div style="font-weight:700;font-size:14px">Delivery Sequence -- '+esc(route?route.name:'')+'</div>'
+    + '<div style="font-size:12px;color:var(--text-muted);margin-top:2px">Drag to reorder or type a number. Greyed = not delivering today.</div></div>'
+    + '<div style="display:flex;gap:8px">'
+    + '<button class="btn btn-outline btn-sm" onclick="closeSeqPanel()">Close</button>'
+    + '<button class="btn btn-primary btn-sm" onclick="saveSequence()">Save Order</button>'
+    + '</div></div>'
+    + rows
+    + '</div>';
+}
+
+// Drag and drop
+function seqDragStart(idx) { dragSrcIdx = idx; document.getElementById('seq-row-'+idx).classList.add('dragging'); }
+function seqDragEnd() { document.querySelectorAll('.seq-row').forEach(function(r){ r.classList.remove('dragging','drag-over'); }); }
+function seqDragOver(e, idx) { e.preventDefault(); document.querySelectorAll('.seq-row').forEach(function(r){ r.classList.remove('drag-over'); }); document.getElementById('seq-row-'+idx).classList.add('drag-over'); }
+function seqDrop(e, idx) {
+  e.preventDefault();
+  if (dragSrcIdx === null || dragSrcIdx === idx) return;
+  var moved = seqCustomers.splice(dragSrcIdx, 1)[0];
+  seqCustomers.splice(idx, 0, moved);
+  seqNormalise();
+  renderSequencer();
+}
+
+// Number input change
+function seqNumChange(idx, val) {
+  seqCustomers[idx].delivery_sequence = parseFloat(val) || idx+1;
+}
+
+// Normalise all sequence numbers to whole integers 1,2,3...
+function seqNormalise() {
+  seqCustomers.sort(function(a,b) { return (a.delivery_sequence||999)-(b.delivery_sequence||999); });
+  seqCustomers.forEach(function(c,i) { c.delivery_sequence = i+1; });
+}
+
+function closeSeqPanel() { var p=document.getElementById('seq-panel'); if(p) p.remove(); }
+
+// Save sequence to Supabase
+async function saveSequence() {
+  seqNormalise();
+  try {
+    for (var i=0; i<seqCustomers.length; i++) {
+      var c = seqCustomers[i];
+      await db.update('gs_customers', c.id, { delivery_sequence: c.delivery_sequence });
+      var ci = customers.findIndex(function(x) { return x.id===c.id; });
+      if (ci!==-1) customers[ci].delivery_sequence = c.delivery_sequence;
+    }
+    toast('Delivery sequence saved for '+seqCustomers.length+' customers', 'success');
+    document.getElementById('seq-panel').remove();
+  } catch(e) { toast('Error: '+e.message, 'error'); }
 }
 
 // ── HELPERS ──
