@@ -248,10 +248,15 @@
   .wlt-search { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
 
   @media (max-width: 768px) {
-    .sidebar { display: none; }
+    .sidebar { display: none; position: fixed; top: 0; left: 0; height: 100vh; z-index: 200; width: var(--sidebar-w); }
+    .sidebar.open { display: flex; }
+    .sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 199; }
+    .sidebar-overlay.open { display: block; }
+    #hamburger { display: inline-block !important; }
     .stats-grid { grid-template-columns: 1fr 1fr 1fr; }
     .form-2, .form-3 { grid-template-columns: 1fr; }
     .fg.s2, .fg.s3 { grid-column: span 1; }
+    .wallet-grid { grid-template-columns: 1fr 1fr; }
   }
 </style>
 </head>
@@ -286,12 +291,14 @@
   </aside>
   <div class="main">
     <header class="topbar">
+      <button id="hamburger" onclick="toggleSidebar()" style="display:none;background:none;border:none;font-size:22px;cursor:pointer;padding:4px 8px;color:var(--text);line-height:1">&#9776;</button>
       <div class="page-title" id="page-title">Customers</div>
       <span class="role-badge">Admin</span>
     </header>
     <div class="content" id="content"></div>
   </div>
 </div>
+<div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
 
 <div class="toasts" id="toasts"></div>
 
@@ -631,8 +638,28 @@ async function boot() {
   try { deliveries  = await db.get('gs_deliveries', 'delivery_date=eq.'+todayStr()+'&order=created_at.asc'); } catch(e) { deliveries = []; }
   try { bottleLogs = await db.get('gs_bottle_log', 'log_date=eq.'+todayStr()); } catch(e) { bottleLogs = []; }
   try { topups     = await db.get('gs_topups',   'order=topup_date.desc'); } catch(e) { topups = []; }
-  go('customers');
+  go('dashboard');
 }
+
+function toggleSidebar() {
+  var sb = document.querySelector('.sidebar');
+  var ov = document.getElementById('sidebar-overlay');
+  if (sb) sb.classList.toggle('open');
+  if (ov) ov.classList.toggle('open');
+}
+// Close sidebar when nav item clicked on mobile
+document.addEventListener('DOMContentLoaded', function() {
+  document.querySelectorAll('.nav-item').forEach(function(el){
+    el.addEventListener('click', function(){
+      var sb = document.querySelector('.sidebar');
+      var ov = document.getElementById('sidebar-overlay');
+      if (window.innerWidth <= 768) {
+        if (sb) sb.classList.remove('open');
+        if (ov) ov.classList.remove('open');
+      }
+    });
+  });
+});
 
 const PAGE_TITLES = { customers:'Customers', routes:'Routes', masters:'Masters', dashboard:'Dashboard', delivery:'Daily Delivery', wallet:'Wallet & Payments', bottles:'Bottle Tracking', reports:'Reports', alerts:'Alerts' };
 
@@ -647,6 +674,7 @@ function go(page) {
   else if (page === 'wallet') renderWallet();
   else if (page === 'delivery') renderDelivery();
   else if (page === 'reports') { if(!window._reportTab) window._reportTab='summary'; renderReports(); if(window._reportTab==='summary') loadSummaryData(); else if(window._reportTab==='route') renderRouteStatement(); else loadReportData(); }
+  else if (page === 'dashboard') { renderDashboard(); }
   else document.getElementById('content').innerHTML = '<div class="empty"><div class="empty-icon">🚧</div><p>Coming in a future phase.</p></div>';
 }
 
@@ -1843,7 +1871,12 @@ function renderWallet() {
       + '<td>'+daysPillHtml(days)+'</td>'
       + '<td><span class="badge badge-'+(c.status||'Active')+'">'+(c.status||'Active')+'</span></td>'
       + '<td>'+lastTopupHtml+'</td>'
-      + '<td><div class="acts"><button class="btn btn-primary btn-xs" onclick="openTopup('+c.id+')">Top-up</button> <button class="btn btn-outline btn-xs" onclick="openWalletDetail('+c.id+')">History</button></div></td>'
+      + '<td><div class="acts">'
+      + (function(){ var wa=(c.whatsapp||c.phone||'').replace(/\D/g,''); var bal=(w.balance||0).toFixed(0); var days=daysRemaining(c.id);
+          return wa ? '<a href="https://wa.me/91'+wa+'?text=Dear+'+encodeURIComponent(c.first_name||'')+'%2C+your+milk+wallet+balance+is+Rs.'+bal+'+with+'+days+'+days+remaining.+Please+top+up+to+continue+supply.+Thank+you%2C+GauRas+Milk." target="_blank" class="btn btn-outline btn-xs">WA</a>' : ''; })()
+      + '<button class="btn btn-primary btn-xs" onclick="openTopup('+c.id+')">Top-up</button>'
+      + '<button class="btn btn-outline btn-xs" onclick="openWalletDetail('+c.id+')">History</button>'
+      + '</div></td>'
       + '</tr>';
   });
 
@@ -2262,6 +2295,13 @@ function renderDelivery() {
       + '<div class="del-meta">'+esc(c.customer_code||'')+' &middot; '+defaultQty+'L &middot; Balance: <span style="color:'+balColor+';font-weight:600">Rs.'+((w.balance||0)).toFixed(0)+'</span></div>'
       + (c.delivery_notes?'<div class="del-note">'+esc(c.delivery_notes)+'</div>':'')
       + (ov?'<div style="font-size:10px;color:#0C447C;margin-top:2px">Override qty active</div>':'')
+      + (function(){
+          if (c.status!=='Grace') return '';
+          var graceDays = c.grace_days||3;
+          var graceDeliveries = deliveries.filter(function(d){ return String(d.customer_id)===String(c.id) && d.status!=='Not Delivered';}).length;
+          var remaining = Math.max(0, graceDays - graceDeliveries);
+          return '<div style="font-size:11px;font-weight:700;color:var(--danger);margin-top:2px">Grace: '+graceDeliveries+'/'+graceDays+' days used &middot; '+remaining+' remaining</div>';
+        })()
       + '</div>'
       + '<div class="del-status-btns">'
       + '<button class="del-status-btn '+selD+'" onclick="setStatus('+c.id+',\'Delivered\','+defaultQty+')">Delivered</button>'
@@ -2372,6 +2412,12 @@ async function saveDeliveryEntry(custId) {
   if (!entry || !entry.status) return toast('Please select a delivery status first', 'error');
   if (entry.status === 'Partial' && (!entry.qty || entry.qty <= 0)) return toast('Please enter quantity for partial delivery', 'error');
   if (entry.status === 'Not Delivered' && !entry.reason) return toast('Please select a reason for non-delivery', 'error');
+  // Duplicate check
+  const dupDate = todayStr();
+  const dupCheck = deliveries.find(function(d){
+    return String(d.customer_id)===String(custId) && d.session===deliverySession && d.delivery_date===dupDate;
+  });
+  if (dupCheck) return toast('Entry already saved for this customer today -- use Undo to correct', 'error');
 
   const today = todayStr();
   const rate = getRateForDate(today);
@@ -2488,6 +2534,9 @@ async function submitAllRoute() {
   });
 
   if (pending.length === 0) return toast('No pending entries to submit', 'error');
+
+  const route = routes.find(function(r){ return String(r.id)===String(deliveryRoute); });
+  if (!confirm('Submit '+pending.length+' '+deliverySession+' delivery entries for '+( route?route.name:'this route')+'?')) return;
 
   for (var i=0; i<pending.length; i++) {
     await saveDeliveryEntry(parseInt(pending[i]));
@@ -3545,6 +3594,167 @@ function exportStatementPDF() {
   win.document.write(html);
   win.document.close();
   win.print();
+}
+
+// ══════════════════════════════════════
+// DASHBOARD
+// ══════════════════════════════════════
+async function renderDashboard() {
+  var today = todayStr();
+  var dow = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date(today).getDay()];
+  var rate = getRateForDate(today);
+
+  // Load today's deliveries fresh
+  var todayDel = [];
+  var todayTops = [];
+  try { todayDel = await db.get('gs_deliveries','delivery_date=eq.'+today); } catch(e){}
+  try { todayTops = await db.get('gs_topups','topup_date=eq.'+today); } catch(e){}
+
+  // Customer stats
+  var total = customers.length;
+  var active = customers.filter(function(c){ return c.status==='Active'; }).length;
+  var grace = customers.filter(function(c){ return c.status==='Grace'; }).length;
+  var paused = customers.filter(function(c){ return isOnPause(c,today); }).length;
+  var stopped = customers.filter(function(c){ return c.status==='Stopped'; }).length;
+
+  // Delivery progress
+  var totalExpected = customers.filter(function(c){
+    return c.status!=='Stopped' && !isOnPause(c,today) && isDeliveryDay(c,today) && ((c.morning_quota||0)+(c.evening_quota||0)>0);
+  }).length;
+  var delivered = todayDel.filter(function(d){ return d.status!=='Not Delivered';}).map(function(d){ return d.customer_id;}).filter(function(v,i,a){ return a.indexOf(v)===i;}).length;
+  var litres = todayDel.reduce(function(s,d){ return s+(d.qty_delivered||0);},0);
+  var amtDeducted = todayDel.reduce(function(s,d){ return s+(d.amount_deducted||0);},0);
+  var amtTopup = todayTops.reduce(function(s,t){ return s+(t.amount||0);},0);
+  var pct = totalExpected>0 ? Math.round(delivered/totalExpected*100) : 0;
+
+  // Low balance alerts
+  var lowBal = customers.filter(function(c){
+    var d=daysRemaining(c.id); return d<3 && d>=0 && c.status==='Active';
+  });
+  var zeroBal = customers.filter(function(c){
+    return getWallet(c.id).balance<=0 && c.status==='Active';
+  });
+  var resumingToday = customers.filter(function(c){ return c.pause_resume===today && c.pause_from && c.pause_from<=today; });
+  var graceCustomers = customers.filter(function(c){ return c.status==='Grace'; });
+
+  // Route delivery progress
+  var routeProgress = routes.map(function(r){
+    var rCusts = customers.filter(function(c){
+      return String(c.route_id)===String(r.id) && c.status!=='Stopped' && !isOnPause(c,today) && isDeliveryDay(c,today) && ((c.morning_quota||0)+(c.evening_quota||0)>0);
+    }).length;
+    var rDone = todayDel.filter(function(d){ return String(d.route_id)===String(r.id) && d.status!=='Not Delivered';}).map(function(d){ return d.customer_id;}).filter(function(v,i,a){ return a.indexOf(v)===i;}).length;
+    var rLitres = todayDel.filter(function(d){ return String(d.route_id)===String(r.id);}).reduce(function(s,d){ return s+(d.qty_delivered||0);},0);
+    return { route:r, total:rCusts, done:rDone, litres:rLitres, pct:rCusts>0?Math.round(rDone/rCusts*100):0 };
+  });
+
+  var html = '';
+
+  // Date hero
+  html += '<div style="background:var(--brand-dark);border-radius:var(--radius);padding:18px 24px;color:#fff;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:18px">';
+  html += '<div><div style="font-size:12px;opacity:0.65;text-transform:uppercase;letter-spacing:0.5px">'+dow+'</div>';
+  html += '<div style="font-size:28px;font-weight:700;margin-top:2px">'+fmtDate(today)+'</div>';
+  html += '<div style="font-size:13px;opacity:0.75;margin-top:4px">Rs.'+rate+'/L current rate</div></div>';
+  html += '<div style="display:flex;gap:20px;flex-wrap:wrap">';
+  html += '<div style="text-align:center"><div style="font-size:28px;font-weight:700">'+pct+'%</div><div style="font-size:11px;opacity:0.7">delivery done</div></div>';
+  html += '<div style="text-align:center"><div style="font-size:28px;font-weight:700">'+litres.toFixed(1)+'L</div><div style="font-size:11px;opacity:0.7">delivered</div></div>';
+  html += '<div style="text-align:center"><div style="font-size:28px;font-weight:700">Rs.'+amtTopup.toFixed(0)+'</div><div style="font-size:11px;opacity:0.7">collected today</div></div>';
+  html += '</div></div>';
+
+  // Alert banners
+  if (resumingToday.length>0) {
+    resumingToday.forEach(function(c){
+      html += '<div class="alert-banner info" style="margin-bottom:8px">🔔 <div><strong>'+esc(c.first_name)+' '+esc(c.last_name)+'</strong> resumes delivery today -- ensure milkman is informed.</div></div>';
+    });
+  }
+  if (zeroBal.length>0) {
+    html += '<div class="alert-banner warn" style="margin-bottom:8px">⚠️ <div><strong>'+zeroBal.length+' customer'+(zeroBal.length>1?'s':'')+' have zero or negative balance</strong> -- top-up required to continue supply.</div></div>';
+  }
+  if (graceCustomers.length>0) {
+    html += '<div class="alert-banner warn" style="margin-bottom:8px">⏳ <div><strong>'+graceCustomers.length+' customer'+(graceCustomers.length>1?'s are':' is')+' in Grace Period</strong> -- will be stopped if balance not topped up.</div></div>';
+  }
+
+  // Stats row
+  html += '<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:18px">';
+  html += dashStat('Total Customers', total, 'var(--text)', '');
+  html += dashStat('Active', active, 'var(--brand)', '');
+  html += dashStat('Grace Period', grace, 'var(--accent)', 'needs top-up');
+  html += dashStat('Paused', paused, 'var(--text-muted)', 'on hold');
+  html += dashStat('Stopped', stopped, 'var(--danger)', 'no supply');
+  html += dashStat('Low Balance', lowBal.length, lowBal.length>0?'var(--accent)':'var(--brand)', 'under 3 days');
+  html += '</div>';
+
+  // Delivery progress bar
+  html += '<div class="card" style="margin-bottom:16px">';
+  html += '<div class="card-header"><div class="card-title">Delivery Progress Today</div>';
+  html += '<div style="font-size:12px;color:var(--text-muted)">'+delivered+' of '+totalExpected+' customers delivered &middot; '+litres.toFixed(1)+'L &middot; Rs.'+amtDeducted.toFixed(0)+' deducted</div></div>';
+  html += '<div style="padding:16px">';
+  html += '<div style="height:10px;background:var(--border);border-radius:5px;overflow:hidden;margin-bottom:16px"><div style="height:100%;width:'+pct+'%;background:var(--brand);border-radius:5px;transition:width 0.3s"></div></div>';
+  // Route progress rows
+  routeProgress.forEach(function(rp){
+    html += '<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">';
+    html += '<div style="width:140px;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(rp.route.name)+'</div>';
+    html += '<div style="flex:1;height:7px;background:var(--border);border-radius:4px;overflow:hidden"><div style="height:100%;width:'+rp.pct+'%;background:'+(rp.pct===100?'var(--brand)':'var(--brand-mid)')+';border-radius:4px"></div></div>';
+    html += '<div style="width:80px;text-align:right;font-size:12px;color:var(--text-muted)">'+rp.done+'/'+rp.total+'</div>';
+    html += '<div style="width:50px;text-align:right;font-size:12px;font-weight:600;color:var(--brand)">'+rp.pct+'%</div>';
+    html += '</div>';
+  });
+  html += '</div></div>';
+
+  // Two column: low balance + today topups
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">';
+
+  // Low balance customers
+  html += '<div class="card"><div class="card-header"><div class="card-title">Low Balance Alerts</div><div style="font-size:12px;color:var(--text-muted)">'+lowBal.length+' customers</div></div>';
+  if (lowBal.length===0) {
+    html += '<div style="padding:20px;text-align:center;color:var(--text-hint);font-size:13px">All customers have healthy balance</div>';
+  } else {
+    html += '<div style="max-height:300px;overflow-y:auto">';
+    lowBal.slice(0,10).forEach(function(c){
+      var w=getWallet(c.id); var d=daysRemaining(c.id);
+      var wa = c.whatsapp||c.phone||'';
+      html += '<div style="padding:10px 16px;border-bottom:1px solid #eef2f0;display:flex;align-items:center;gap:10px">';
+      html += '<div style="flex:1"><div style="font-weight:600;font-size:13px">'+esc(c.first_name)+' '+esc(c.last_name)+'</div>';
+      html += '<div style="font-size:11px;color:var(--text-hint)">'+esc(c.customer_code||'')+' &middot; Rs.'+(w.balance||0).toFixed(0)+' &middot; '+d+' days left</div></div>';
+      html += '<div style="display:flex;gap:4px">';
+      if (wa) {
+        var waMsg = 'Dear+'+encodeURIComponent(c.first_name||'')+',+your+milk+wallet+balance+is+Rs.'+(w.balance||0).toFixed(0)+'+with+'+d+'+days+remaining.+Please+top+up.+GauRas+Milk.';
+        html += '<a href="https://wa.me/91'+wa+'?text='+waMsg+'" target="_blank" class="btn btn-outline btn-xs">WhatsApp</a>';
+      }
+      html += '<button class="btn btn-primary btn-xs" onclick="openTopup('+c.id+')">Top-up</button>';
+      html += '</div></div>';
+    });
+    html += '</div>';
+  }
+  html += '</div>';
+
+  // Today's top-ups
+  html += '<div class="card"><div class="card-header"><div class="card-title">Collections Today</div><div style="font-size:12px;color:var(--text-muted)">Rs.'+amtTopup.toFixed(0)+' received</div></div>';
+  if (todayTops.length===0) {
+    html += '<div style="padding:20px;text-align:center;color:var(--text-hint);font-size:13px">No top-ups recorded today</div>';
+  } else {
+    html += '<div style="max-height:300px;overflow-y:auto">';
+    todayTops.forEach(function(t){
+      var c=customers.find(function(x){ return String(x.id)===String(t.customer_id);});
+      html += '<div style="padding:10px 16px;border-bottom:1px solid #eef2f0;display:flex;align-items:center;gap:10px">';
+      html += '<div style="flex:1"><div style="font-weight:600;font-size:13px">'+esc(c?c.first_name+' '+c.last_name:'Unknown')+'</div>';
+      html += '<div style="font-size:11px;color:var(--text-hint)">'+esc(t.payment_mode||'')+(t.reference_no?' &middot; '+esc(t.reference_no):'')+'</div></div>';
+      html += '<div style="font-weight:700;color:var(--brand)">Rs.'+t.amount+'</div>';
+      html += '</div>';
+    });
+    html += '</div>';
+  }
+  html += '</div>';
+  html += '</div>'; // end grid
+
+  document.getElementById('content').innerHTML = html;
+}
+
+function dashStat(label, val, color, sub) {
+  return '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px">'
+    +'<div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">'+label+'</div>'
+    +'<div style="font-size:22px;font-weight:700;color:'+color+'">'+val+'</div>'
+    +(sub?'<div style="font-size:10px;color:var(--text-hint);margin-top:2px">'+sub+'</div>':'')
+    +'</div>';
 }
 
 // ── HELPERS ──
