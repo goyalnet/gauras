@@ -1159,32 +1159,92 @@ function renderCustomerMaster() {
   var b = getMastersBody(); if(b) b.innerHTML = html;
 }
 
+let expandedRouteMaster = {}; // routeId -> bool
+
 function renderRouteMaster() {
-  var maxC = Math.max(1, Math.max.apply(null, routes.map(function(r){ return customers.filter(function(c){ return c.route_id===r.id;}).length; }).concat([1])));
+  var today = todayStr();
 
-  var cards = routes.length===0
+  var routeBlocks = routes.length===0
     ? '<div class="empty"><div class="empty-icon">🗺️</div><p>No routes yet. Add your first route!</p></div>'
-    : '<div class="route-grid">'+routes.map(function(r) {
-        var cc = customers.filter(function(c){ return c.route_id===r.id;}).length;
-        var ll = customers.filter(function(c){ return c.route_id===r.id;}).reduce(function(s,c){ return s+(c.morning_quota||0)+(c.evening_quota||0);},0);
-        return '<div class="route-card">'
-          + '<div style="display:flex;justify-content:space-between;align-items:flex-start">'
-          + '<div><div class="rc-name">'+esc(r.name)+'</div>'
-          + '<div style="font-size:12px;color:var(--text-muted);margin-top:2px">'+esc(r.area||'')+(r.milkman?' &middot; '+esc(r.milkman):'')+'</div></div>'
-          + '<span class="badge badge-route">'+esc(r.delivery_time||'Both')+'</span>'
-          + '</div>'
-          + '<div class="rc-meta"><span>👥 '+cc+' customers</span><span>🥛 '+ll.toFixed(1)+'L/day</span></div>'
-          + '<div class="rc-bar"><div class="rc-bar-fill" style="width:'+Math.round(cc/maxC*100)+'%"></div></div>'
-          + (r.notes?'<div style="font-size:11px;color:var(--text-hint);margin-top:8px">'+esc(r.notes)+'</div>':'')
-          + '<div style="display:flex;gap:6px;margin-top:12px">'
-          + '<button class="btn btn-outline btn-sm" style="flex:1" onclick="openEditRoute('+r.id+')">Edit</button>'
-          + '<button class="btn btn-danger btn-sm" onclick="confirmDelRoute('+r.id+')">Delete</button>'
-          + '</div></div>';
-      }).join('')+'</div>';
+    : routes.map(function(r) {
+        var routeCusts = customers
+          .filter(function(c){ return String(c.route_id)===String(r.id); })
+          .sort(function(a,b){ return (a.delivery_sequence||999)-(b.delivery_sequence||999); });
+        var cc = routeCusts.length;
+        var ll = routeCusts.reduce(function(s,c){ return s+(c.morning_quota||0)+(c.evening_quota||0);},0);
+        var active  = routeCusts.filter(function(c){ return c.status==='Active';}).length;
+        var paused  = routeCusts.filter(function(c){ return isOnPause(c,today);}).length;
+        var grace   = routeCusts.filter(function(c){ return c.status==='Grace';}).length;
+        var stopped = routeCusts.filter(function(c){ return c.status==='Stopped';}).length;
+        var isExp   = expandedRouteMaster[r.id];
 
-  var html = '<div style="display:flex;justify-content:flex-end;margin-bottom:12px">'
+        // Customer rows
+        var custRows = routeCusts.map(function(c) {
+          var w = getWallet(c.id);
+          var sched = (c.schedule_type||'Daily')==='Daily' ? 'Daily'
+            : (c.schedule_days||'').split(',').map(Number).filter(function(d){ return !isNaN(d);}).sort().map(function(d){ return DAY_NAMES[d];}).join(' ');
+          var statusCol = c.status==='Active'?'var(--brand)':c.status==='Grace'?'var(--accent)':'var(--danger)';
+          var onPause = isOnPause(c, today);
+          return '<tr>'
+            + '<td style="width:32px;text-align:center;color:var(--text-hint);font-size:12px">'+(c.delivery_sequence||'--')+'</td>'
+            + '<td><div class="td-primary">'+esc(c.first_name||'')+' '+esc(c.last_name||'')+'</div><div class="td-sub">'+esc(c.customer_code||'')+'</div></td>'
+            + '<td style="font-size:12px">'+esc(c.phone||'--')+'</td>'
+            + '<td style="font-size:12px">'+(c.morning_quota||0)+'L+'+(c.evening_quota||0)+'L</td>'
+            + '<td style="font-size:12px">'+esc(sched)+'</td>'
+            + '<td><span class="badge badge-'+(onPause?'Paused':c.status||'Active')+'">'+(onPause?'Paused':c.status||'Active')+'</span></td>'
+            + '<td style="font-weight:600;font-size:12px;color:'+(w.balance>=0?'var(--brand)':'var(--danger)')+'">Rs.'+(w.balance||0).toFixed(0)+'</td>'
+            + '<td><div class="acts">'
+            + '<button class="btn btn-outline btn-xs" onclick="openEditCust('+c.id+')">Edit</button>'
+            + '<button class="btn btn-xs" style="background:#f0f3f2;color:#4a5e58" onclick="openPause('+c.id+')">Pause</button>'
+            + '</div></td>'
+            + '</tr>';
+        }).join('');
+
+        var custTable = routeCusts.length===0
+          ? '<div style="padding:14px 18px;color:var(--text-hint);font-size:13px">No customers on this route yet.</div>'
+          : '<div class="tbl-wrap"><table><thead><tr>'
+            + '<th style="width:32px">#</th><th>Customer</th><th>Phone</th><th>Quota</th><th>Schedule</th><th>Status</th><th>Balance</th><th>Actions</th>'
+            + '</tr></thead><tbody>'+custRows+'</tbody>'
+            + '<tfoot><tr style="background:var(--bg)">'
+            + '<td colspan="3" style="font-size:12px;font-weight:600;padding:8px 12px">Total: '+cc+' customers</td>'
+            + '<td style="font-size:12px;font-weight:600;padding:8px 12px">'+ll.toFixed(1)+'L/day</td>'
+            + '<td colspan="2" style="font-size:12px;padding:8px 12px">'
+            + '<span class="badge badge-Active" style="margin-right:4px">'+active+' active</span>'
+            + (grace>0?'<span class="badge badge-Grace" style="margin-right:4px">'+grace+' grace</span>':'')
+            + (paused>0?'<span class="badge badge-Paused" style="margin-right:4px">'+paused+' paused</span>':'')
+            + (stopped>0?'<span class="badge badge-Stopped">'+stopped+' stopped</span>':'')
+            + '</td><td colspan="2"></td>'
+            + '</tr></tfoot>'
+            + '</table></div>';
+
+        return '<div class="card" style="margin-bottom:12px">'
+          // Route header - clickable to expand
+          + '<div onclick="expandedRouteMaster['+r.id+']=!expandedRouteMaster['+r.id+'];renderRouteMaster()" '
+          + 'style="padding:14px 18px;cursor:pointer;display:flex;align-items:center;gap:12px;'+(isExp?'border-bottom:1px solid var(--border)':'')+'">'
+          + '<span style="font-size:14px;color:var(--text-hint)">'+(isExp?'&#9660;':'&#9654;')+'</span>'
+          + '<div style="flex:1">'
+          + '<div style="font-weight:700;font-size:15px">'+esc(r.name)+'</div>'
+          + '<div style="font-size:12px;color:var(--text-muted);margin-top:2px">'
+          + esc(r.area||'')+(r.milkman?' &middot; Milkman: '+esc(r.milkman):'')
+          + ' &middot; <span class="badge badge-route" style="font-size:10px">'+esc(r.delivery_time||'Both')+'</span>'
+          + '</div></div>'
+          + '<div style="display:flex;gap:16px;align-items:center">'
+          + '<div style="text-align:center"><div style="font-size:16px;font-weight:700;color:var(--brand)">'+cc+'</div><div style="font-size:10px;color:var(--text-muted)">customers</div></div>'
+          + '<div style="text-align:center"><div style="font-size:16px;font-weight:700;color:var(--brand)">'+ll.toFixed(1)+'L</div><div style="font-size:10px;color:var(--text-muted)">per day</div></div>'
+          + '<div style="display:flex;gap:6px" onclick="event.stopPropagation()">'
+          + '<button class="btn btn-outline btn-sm" onclick="openEditRoute('+r.id+')">Edit</button>'
+          + '<button class="btn btn-sm" style="background:var(--brand-light);color:var(--brand-dark)" onclick="openSequencer('+r.id+')">Arrange</button>'
+          + '<button class="btn btn-danger btn-sm" onclick="confirmDelRoute('+r.id+')">Delete</button>'
+          + '</div></div></div>'
+          // Expanded customer list
+          + (isExp ? custTable : '')
+          + '</div>';
+      }).join('');
+
+  var html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'
+    + '<div style="font-size:13px;color:var(--text-muted)">'+routes.length+' routes &middot; '+customers.length+' customers total</div>'
     + '<button class="btn btn-primary" onclick="openAddRoute()">+ Add Route</button></div>'
-    + '<div class="card"><div class="card-body">'+cards+'</div></div>';
+    + routeBlocks;
 
   var b = getMastersBody(); if(b) b.innerHTML = html;
 }
