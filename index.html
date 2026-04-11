@@ -177,6 +177,18 @@
   .seq-day { width: 20px; height: 20px; border-radius: 50%; font-size: 9px; font-weight: 700; display: flex; align-items: center; justify-content: center; background: var(--bg); color: var(--text-hint); border: 1px solid var(--border); }
   .seq-day.active-day { background: var(--brand); color: #fff; border-color: var(--brand); }
 
+  /* BOTTLE LOG */
+  .bottle-panel { background: var(--surface); border-radius: var(--radius); border: 2px solid var(--brand-mid); padding: 18px 20px; margin-bottom: 16px; }
+  .bottle-panel-title { font-weight: 700; font-size:14px; color: var(--brand-dark); margin-bottom: 14px; display:flex; align-items:center; gap:8px; }
+  .bottle-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; margin-bottom: 14px; }
+  .bottle-field { display: flex; flex-direction: column; gap: 5px; }
+  .bottle-field label { font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.4px; }
+  .bottle-input { padding: 8px 11px; border: 1.5px solid var(--border); border-radius: 7px; font-size:15px; font-weight:700; text-align:center; font-family:inherit; color:var(--brand-dark); outline:none; }
+  .bottle-input:focus { border-color: var(--brand-mid); }
+  .bottle-saved { background: var(--brand-light); border-radius: var(--radius); padding: 12px 16px; display:flex; gap:20px; flex-wrap:wrap; align-items:center; }
+  .bottle-saved-item { font-size:13px; color:var(--brand-dark); }
+  .bottle-saved-item strong { font-size:16px; font-weight:700; }
+
   /* DELIVERY */
   .del-hero { background: var(--brand-dark); border-radius: var(--radius); padding: 16px 20px; color: #fff; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
   .del-session-btn { padding: 8px 20px; border-radius: 8px; border: 2px solid rgba(255,255,255,0.3); background: transparent; color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.14s; }
@@ -601,7 +613,7 @@ const db = {
   del:    (t, id)    => sbFetch(`${t}?id=eq.${id}`, { method:'DELETE', headers:{'Prefer':'return=minimal'} })
 };
 
-let customers = [], routes = [], rates = [], overrides = [], wallets = [], topups = [], deliveries = [];
+let customers = [], routes = [], rates = [], overrides = [], wallets = [], topups = [], deliveries = [], bottleLogs = [];
 let editCustId = null, editRouteId = null;
 let srch = '', fStatus = '', fRoute = '';
 let viewDate = new Date().toISOString().split('T')[0];
@@ -616,7 +628,8 @@ async function boot() {
   try { rates     = await db.get('gs_rates',     'order=effective_from.desc'); } catch(e) { rates = []; }
   try { overrides  = await db.get('gs_quantity_overrides', 'order=from_date.asc'); } catch(e) { overrides = []; }
   try { wallets    = await db.get('gs_wallets',  'order=customer_id.asc'); } catch(e) { wallets = []; }
-  try { deliveries = await db.get('gs_deliveries', 'delivery_date=eq.'+todayStr()+'&order=created_at.asc'); } catch(e) { deliveries = []; }
+  try { deliveries  = await db.get('gs_deliveries', 'delivery_date=eq.'+todayStr()+'&order=created_at.asc'); } catch(e) { deliveries = []; }
+  try { bottleLogs = await db.get('gs_bottle_log', 'log_date=eq.'+todayStr()); } catch(e) { bottleLogs = []; }
   try { topups     = await db.get('gs_topups',   'order=topup_date.desc'); } catch(e) { topups = []; }
   go('customers');
 }
@@ -2101,6 +2114,29 @@ function renderDelivery() {
     html += '</div>';
   }
 
+  // Bottle log panel
+  var existingLog = bottleLogs.find(function(b){ return String(b.route_id)===String(deliveryRoute) && b.session===deliverySession && b.log_date===today; });
+  if (existingLog) {
+    html += '<div class="bottle-saved">';
+    html += '<div style="font-size:13px;font-weight:700;color:var(--brand-dark)">🍼 Bottle Log Saved</div>';
+    html += '<div class="bottle-saved-item"><strong>'+existingLog.filled_out+'</strong> taken out</div>';
+    html += '<div class="bottle-saved-item"><strong>'+existingLog.filled_returned+'</strong> filled returned</div>';
+    html += '<div class="bottle-saved-item"><strong>'+existingLog.empty_collected+'</strong> empty collected</div>';
+    html += '<button class="btn btn-outline btn-sm" onclick="editBottleLog('+existingLog.id+')">Edit</button>';
+    html += '</div>';
+  } else {
+    html += '<div class="bottle-panel">';
+    html += '<div class="bottle-panel-title">🍼 Bottle Log — '+deliverySession+' Session</div>';
+    html += '<div class="bottle-grid">';
+    html += '<div class="bottle-field"><label>Filled Bottles Taken Out</label><input class="bottle-input" type="number" step="1" min="0" id="bl-out" placeholder="0"></div>';
+    html += '<div class="bottle-field"><label>Filled Bottles Returned</label><input class="bottle-input" type="number" step="1" min="0" id="bl-ret" placeholder="0"></div>';
+    html += '<div class="bottle-field"><label>Empty Bottles Collected</label><input class="bottle-input" type="number" step="1" min="0" id="bl-emp" placeholder="0"></div>';
+    html += '</div>';
+    html += '<button class="btn btn-primary" onclick="saveBottleLog()">💾 Save Bottle Log</button>';
+    html += '<span style="font-size:12px;color:var(--text-muted);margin-left:12px">Per-customer empty bottles are recorded on each delivery card</span>';
+    html += '</div>';
+  }
+
   html += cards + emptyMsg;
 
   if (total > 0 && done < total) {
@@ -2459,6 +2495,47 @@ async function saveSequence() {
     toast('Sequence saved for '+seqList.length+' customers', 'success');
     var p = document.getElementById('seq-panel');
     if (p) p.remove();
+  } catch(e) { toast('Error: '+e.message, 'error'); }
+}
+
+// ── BOTTLE LOG ──
+async function saveBottleLog() {
+  var out = parseInt((document.getElementById('bl-out')||{}).value)||0;
+  var ret = parseInt((document.getElementById('bl-ret')||{}).value)||0;
+  var emp = parseInt((document.getElementById('bl-emp')||{}).value)||0;
+  var today = todayStr();
+  var data = {
+    route_id: deliveryRoute,
+    log_date: today,
+    session: deliverySession,
+    filled_out: out,
+    filled_returned: ret,
+    empty_collected: emp
+  };
+  try {
+    var res = await db.insert('gs_bottle_log', data);
+    bottleLogs.push(res[0]);
+    toast('Bottle log saved', 'success');
+    renderDelivery();
+  } catch(e) { toast('Error: '+e.message, 'error'); }
+}
+
+async function editBottleLog(logId) {
+  var log = bottleLogs.find(function(b){ return b.id===logId; });
+  if (!log) return;
+  var out = prompt('Filled bottles taken out:', log.filled_out);
+  if (out === null) return;
+  var ret = prompt('Filled bottles returned:', log.filled_returned);
+  if (ret === null) return;
+  var emp = prompt('Empty bottles collected:', log.empty_collected);
+  if (emp === null) return;
+  try {
+    var data = { filled_out: parseInt(out)||0, filled_returned: parseInt(ret)||0, empty_collected: parseInt(emp)||0 };
+    await db.update('gs_bottle_log', logId, data);
+    var i = bottleLogs.findIndex(function(b){ return b.id===logId; });
+    if (i!==-1) bottleLogs[i] = Object.assign({}, bottleLogs[i], data);
+    toast('Bottle log updated', 'success');
+    renderDelivery();
   } catch(e) { toast('Error: '+e.message, 'error'); }
 }
 
