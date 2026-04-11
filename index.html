@@ -2749,6 +2749,72 @@ function statBox(label, val, color, sub) {
     +'</div>';
 }
 
+function exportRouteSummaryCSV(routeId) {
+  var route = routes.find(function(r){ return r.id===routeId; });
+  if (!route) return;
+  var rd = summaryDeliveries.filter(function(d){ return String(d.route_id)===String(routeId); });
+  var hdr = ['Customer','Code','Session','Qty(L)','Status','Deducted(Rs)','Empties','Reason'];
+  var rows = [hdr];
+  var custIds = rd.map(function(d){ return d.customer_id;}).filter(function(v,i,a){ return a.indexOf(v)===i;});
+  custIds.forEach(function(cid){
+    var c = customers.find(function(x){ return x.id===cid;});
+    rd.filter(function(d){ return d.customer_id===cid;}).forEach(function(d){
+      rows.push([c?c.first_name+' '+c.last_name:'', c?c.customer_code||'':'', d.session||'', d.qty_delivered||0, d.status||'', d.amount_deducted||0, d.empty_bottles||0, d.reason||'']);
+    });
+  });
+  var lines = rows.map(function(r){ return r.map(function(x){ return '"'+String(x||'').replace(/"/g,'""')+'"';}).join(',');});
+  var blob = new Blob([lines.join(String.fromCharCode(13,10))],{type:'text/csv'});
+  var a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='route-'+esc(route.name)+'-'+summaryDate+'.csv'; a.click();
+}
+
+function exportRouteSummaryPDF(routeId) {
+  var route = routes.find(function(r){ return r.id===routeId; });
+  if (!route) return;
+  var rd = summaryDeliveries.filter(function(d){ return String(d.route_id)===String(routeId); });
+  var rb = summaryBottleLogs.filter(function(b){ return String(b.route_id)===String(routeId); });
+  var rL=rd.reduce(function(s,d){ return s+(d.qty_delivered||0);},0);
+  var rA=rd.reduce(function(s,d){ return s+(d.amount_deducted||0);},0);
+  var rE=rd.reduce(function(s,d){ return s+(d.empty_bottles||0);},0);
+  var tableRows='';
+  var custIds = rd.map(function(d){ return d.customer_id;}).filter(function(v,i,a){ return a.indexOf(v)===i;});
+  custIds.forEach(function(cid){
+    var c=customers.find(function(x){ return x.id===cid;});
+    var cDeliveries=rd.filter(function(d){ return d.customer_id===cid;});
+    cDeliveries.forEach(function(d,di){
+      var color=d.status==='Delivered'?'green':d.status==='Partial'?'orange':'red';
+      tableRows+='<tr>';
+      if(di===0) tableRows+='<td rowspan="'+cDeliveries.length+'"><b>'+esc(c?c.first_name+' '+c.last_name:'')+' </b><br><small>'+esc(c?c.customer_code||'':'')+'</small></td>';
+      tableRows+='<td>'+esc(d.session||'')+'</td><td>'+(d.qty_delivered||0)+'L</td><td style="color:'+color+'">'+esc(d.status||'')+'</td><td style="color:red">Rs.'+(d.amount_deducted||0).toFixed(0)+'</td><td>'+(d.empty_bottles||0)+'</td></tr>';
+    });
+  });
+  var bottleSection='';
+  if(rb.length>0){
+    bottleSection='<h3>Bottle Log</h3><table><thead><tr><th>Session</th><th>Filled Out</th><th>Filled Returned</th><th>Empty Collected</th></tr></thead><tbody>';
+    rb.forEach(function(b){ bottleSection+='<tr><td>'+esc(b.session)+'</td><td>'+b.filled_out+'</td><td>'+b.filled_returned+'</td><td>'+b.empty_collected+'</td></tr>'; });
+    bottleSection+='</tbody></table>';
+  }
+  var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Route Report</title>'
+    +'<style>body{font-family:Arial,sans-serif;font-size:12px;padding:20px}h1{font-size:16px}h3{font-size:13px;margin:14px 0 6px}'
+    +'table{width:100%;border-collapse:collapse;margin-top:8px}th{background:#085041;color:#fff;padding:7px;text-align:left;font-size:11px}'
+    +'td{padding:6px 8px;border-bottom:1px solid #ddd}.hero{display:flex;gap:12px;margin:10px 0;flex-wrap:wrap}'
+    +'.hbox{border:1px solid #ddd;border-radius:5px;padding:8px 12px}'
+    +'.hl{font-size:10px;color:#666;text-transform:uppercase}.hv{font-size:16px;font-weight:bold}'
+    +'</style></head><body>'
+    +'<h1>Route Report: '+esc(route.name)+'</h1>'
+    +'<div style="color:#444;margin-bottom:8px">'+fmtDate(summaryDate)+(route.milkman?' &middot; Milkman: '+esc(route.milkman):'')+'</div>'
+    +'<div class="hero">'
+    +'<div class="hbox"><div class="hl">Litres Delivered</div><div class="hv" style="color:#0F6E56">'+rL.toFixed(1)+'L</div></div>'
+    +'<div class="hbox"><div class="hl">Amount Deducted</div><div class="hv" style="color:#A32D2D">Rs.'+rA.toFixed(0)+'</div></div>'
+    +'<div class="hbox"><div class="hl">Empty Bottles</div><div class="hv">'+rE+'</div></div>'
+    +'</div>'
+    +'<table><thead><tr><th>Customer</th><th>Session</th><th>Qty</th><th>Status</th><th>Deducted</th><th>Empties</th></tr></thead>'
+    +'<tbody>'+tableRows+'</tbody></table>'
+    +bottleSection
+    +'<p style="margin-top:16px;font-size:10px;color:#888">Generated on '+fmtDate(todayStr())+' &middot; GauRas Milk Distribution</p>'
+    +'</body></html>';
+  var win=window.open('','_blank'); win.document.write(html); win.document.close(); win.print();
+}
+
 function exportSummaryCSV() {
   var hdr = ['Route','Session','Customer','Code','Qty(L)','Status','Deducted(Rs)','Empties','Reason'];
   var rows = [hdr];
@@ -2815,10 +2881,10 @@ function renderMonthlyStatement() {
   html += '<div class="card-header"><div class="card-title">Monthly Statement</div></div>';
   html += '<div style="padding:16px;display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">';
   html += '<div><label class="flabel" style="display:block;margin-bottom:5px">Month</label>';
-  html += '<input type="month" value="'+reportMonth+'" style="padding:8px 11px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:inherit;outline:none" onchange="reportMonth=this.value;renderReports()">';
+  html += '<input type="month" value="'+reportMonth+'" style="padding:8px 11px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:inherit;outline:none" onchange="reportMonth=this.value;loadReportData()">';
   html += '</div>';
   html += '<div style="flex:1;min-width:220px"><label class="flabel" style="display:block;margin-bottom:5px">Customer</label>';
-  html += '<select style="width:100%;padding:8px 11px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:inherit;outline:none;background:var(--surface)" onchange="reportCustomerId=parseInt(this.value)||null;renderReports()">'+custOpts+'</select>';
+  html += '<select style="width:100%;padding:8px 11px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:inherit;outline:none;background:var(--surface)" onchange="reportCustomerId=parseInt(this.value)||null;renderMonthlyStatement()">'+custOpts+'</select>';
   html += '</div>';
   html += '</div></div>';
 
@@ -2947,13 +3013,14 @@ function renderMonthlyStatement() {
 
 async function loadReportData() {
   window._reportTab = 'statement';
+  renderReports(); // build tabs shell first
   try {
     reportAllDeliveries = await db.get('gs_deliveries', 'delivery_date=gte.'+reportMonth+'-01&delivery_date=lte.'+reportMonth+'-31&order=delivery_date.asc');
   } catch(e) { reportAllDeliveries = []; }
   try {
     reportAllTopups = await db.get('gs_topups', 'topup_date=gte.'+reportMonth+'-01&topup_date=lte.'+reportMonth+'-31&order=topup_date.asc');
   } catch(e) { reportAllTopups = []; }
-  renderReports();
+  renderMonthlyStatement();
 }
 
 function exportStatementCSV() {
