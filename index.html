@@ -2338,47 +2338,10 @@ function seqRenderRows() {
     handle.innerHTML = '&#9776;';
 
     // Number input
-    var num = document.createElement('input');
-    num.type = 'number';
-    num.className = 'seq-num';
-    num.min = 1;
-    num.max = seqList.length;
-    num.value = i + 1;
-    num.addEventListener('keydown', (function(idx){
-      return function(e){
-        if (e.key === 'ArrowUp') {
-          e.preventDefault();
-          if (idx === 0) return;
-          var moved = seqList.splice(idx, 1)[0];
-          seqList.splice(idx - 1, 0, moved);
-          seqList.forEach(function(x,j){ x.delivery_sequence = j+1; });
-          seqRenderRows();
-          // Restore focus to same customer's input
-          var inp = document.querySelector('#sr-' + moved.id + ' input');
-          if (inp) inp.focus();
-        } else if (e.key === 'ArrowDown') {
-          e.preventDefault();
-          if (idx === seqList.length - 1) return;
-          var moved = seqList.splice(idx, 1)[0];
-          seqList.splice(idx + 1, 0, moved);
-          seqList.forEach(function(x,j){ x.delivery_sequence = j+1; });
-          seqRenderRows();
-          var inp = document.querySelector('#sr-' + moved.id + ' input');
-          if (inp) inp.focus();
-        } else if (e.key === 'Enter') {
-          e.preventDefault();
-          var newPos = parseInt(this.value) - 1;
-          if (isNaN(newPos)) return;
-          newPos = Math.max(0, Math.min(seqList.length - 1, newPos));
-          var moved = seqList.splice(idx, 1)[0];
-          seqList.splice(newPos, 0, moved);
-          seqList.forEach(function(x,j){ x.delivery_sequence = j+1; });
-          seqRenderRows();
-          var inp = document.querySelector('#sr-' + moved.id + ' input');
-          if (inp) inp.focus();
-        }
-      };
-    })(i));
+    // Position badge (not an input - just display)
+    var num = document.createElement('div');
+    num.style.cssText = 'min-width:28px;height:28px;border-radius:50%;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0;cursor:default';
+    num.textContent = i + 1;
 
     // Info
     var info = document.createElement('div');
@@ -2398,6 +2361,28 @@ function seqRenderRows() {
       pill.textContent = isOnPause(c,today) ? 'Paused' : 'Off today';
       row.appendChild(pill);
     }
+
+    // Make row focusable and handle arrow keys on the row
+    row.tabIndex = 0;
+    row.style.outline = 'none';
+    row.addEventListener('keydown', (function(cid){
+      return function(e) {
+        if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+        e.preventDefault();
+        var idx = seqList.findIndex(function(x){ return x.id === cid; });
+        if (idx === -1) return;
+        var dir = e.key === 'ArrowUp' ? -1 : 1;
+        var newIdx = idx + dir;
+        if (newIdx < 0 || newIdx >= seqList.length) return;
+        var moved = seqList.splice(idx, 1)[0];
+        seqList.splice(newIdx, 0, moved);
+        seqList.forEach(function(x,j){ x.delivery_sequence = j+1; });
+        seqRenderRows();
+        // Restore focus
+        var el = document.getElementById('sr-' + moved.id);
+        if (el) el.focus();
+      };
+    })(c.id));
 
     // Drag events — use customer id stored in closure
     var cid = c.id;
