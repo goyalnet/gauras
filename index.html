@@ -163,6 +163,7 @@
   .seq-row { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid #eef2f0; cursor: grab; transition: background 0.1s; user-select: none; }
   .seq-row:last-child { border-bottom: none; }
   .seq-row:hover { background: #f5faf8; }
+  .seq-row:focus { background: #e8f4ef; outline: 2px solid var(--brand); outline-offset: -2px; }
   .seq-row.dragging { opacity: 0.4; }
   .seq-row.drag-over { border-top: 2px solid var(--brand); }
   .seq-row.skipped-day { opacity: 0.45; }
@@ -2283,7 +2284,7 @@ function openSequencer(routeId) {
   hdr.className = 'seq-panel-header';
   hdr.innerHTML = '<div>'
     + '<div style="font-weight:700;font-size:14px">Delivery Sequence -- ' + esc(route ? route.name : '') + '</div>'
-    + '<div style="font-size:12px;color:var(--text-muted);margin-top:2px">Drag rows to reorder. Edit number and press Enter to jump. Then Save.</div>'
+    + '<div style="font-size:12px;color:var(--text-muted);margin-top:2px">Drag &#9776; to reorder, or click a row then use &#8593;&#8595; arrow keys to move it.</div>'
     + '</div>';
   var btnClose = document.createElement('button');
   btnClose.className = 'btn btn-outline btn-sm';
@@ -2338,10 +2339,31 @@ function seqRenderRows() {
     handle.innerHTML = '&#9776;';
 
     // Number input
-    // Position badge (not an input - just display)
-    var num = document.createElement('div');
-    num.style.cssText = 'min-width:28px;height:28px;border-radius:50%;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0;cursor:default';
-    num.textContent = i + 1;
+    // Position input — text type so browser arrows don't interfere
+    var num = document.createElement('input');
+    num.type = 'text';
+    num.className = 'seq-num';
+    num.value = i + 1;
+    num.title = 'Type a number and press Enter to jump to that position';
+    num.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        e.stopPropagation();
+        var newPos = parseInt(this.value) - 1;
+        if (isNaN(newPos)) return;
+        newPos = Math.max(0, Math.min(seqList.length - 1, newPos));
+        var thisCid = this.parentNode.id.replace('sr-','');
+        var idx = seqList.findIndex(function(x){ return String(x.id)===String(thisCid); });
+        if (idx === -1) return;
+        var moved = seqList.splice(idx, 1)[0];
+        seqList.splice(newPos, 0, moved);
+        seqList.forEach(function(x,j){ x.delivery_sequence = j+1; });
+        seqRenderRows();
+        var el = document.getElementById('sr-' + moved.id);
+        if (el) el.focus();
+      }
+    });
+    num.addEventListener('click', function(e) { e.stopPropagation(); this.select(); });
 
     // Info
     var info = document.createElement('div');
