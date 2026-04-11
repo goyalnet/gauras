@@ -2569,6 +2569,13 @@ async function editBottleLog(logId) {
 // ══════════════════════════════════════
 
 let reportMonth = new Date().toISOString().slice(0,7); // YYYY-MM
+// Date range for route/customer statements
+var _today = new Date().toISOString().split('T')[0];
+var _firstOfMonth = _today.slice(0,7)+'-01';
+let routeFromDate = _firstOfMonth;
+let routeToDate = _today;
+let custFromDate = _firstOfMonth;
+let custToDate = _today;
 let reportCustomerId = null;
 let reportAllDeliveries = []; // loaded for selected month
 let reportAllTopups = [];
@@ -2625,8 +2632,8 @@ function setReportTab(tab) {
   else window._reportTab = 'customer';
   renderReports();
   if (window._reportTab === 'summary') loadSummaryData();
-  else if (window._reportTab === 'route') renderRouteStatement();
-  else loadReportData();
+  else if (window._reportTab === 'route') { window._routeDataMonth = null; renderRouteStatement(); }
+  else { window._customerDataMonth = null; renderMonthlyStatement(); }
 }
 
 function renderDailySummary() {
@@ -2909,9 +2916,18 @@ function renderRouteStatement() {
   var html = '<div class="card" style="margin-bottom:16px">'
     + '<div class="card-header"><div class="card-title">Route Statement</div></div>'
     + '<div style="padding:16px;display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">'
-    + '<div><label class="flabel" style="display:block;margin-bottom:5px">Month</label>'
-    + '<input type="month" value="'+stmtRouteMonth+'" style="padding:8px 11px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:inherit;outline:none" onchange="stmtRouteMonth=this.value;renderRouteStatement()">'
+    + '<div><label class="flabel" style="display:block;margin-bottom:5px">From Date</label>'
+    + '<input type="date" value="'+routeFromDate+'" max="'+todayStr()+'" style="padding:8px 11px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:inherit;outline:none" onchange="routeFromDate=this.value;window._routeDataMonth=null;renderRouteStatement()">'
     + '</div>'
+    + '<div><label class="flabel" style="display:block;margin-bottom:5px">To Date</label>'
+    + '<input type="date" value="'+routeToDate+'" max="'+todayStr()+'" style="padding:8px 11px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:inherit;outline:none" onchange="routeToDate=this.value;window._routeDataMonth=null;renderRouteStatement()">'
+    + '</div>'
+    + '<div><label class="flabel" style="display:block;margin-bottom:5px">Quick Select</label>'
+    + '<div style="display:flex;gap:4px">'
+    + '<button class="btn btn-outline btn-xs" onclick="setRoutePeriod(0)">This Month</button>'
+    + '<button class="btn btn-outline btn-xs" onclick="setRoutePeriod(1)">This Week</button>'
+    + '<button class="btn btn-outline btn-xs" onclick="setRoutePeriod(2)">Today</button>'
+    + '</div></div>'
     + '<div style="flex:1;min-width:200px"><label class="flabel" style="display:block;margin-bottom:5px">Route</label>'
     + '<select style="width:100%;padding:8px 11px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:inherit;outline:none;background:var(--surface)" onchange="stmtRouteId=parseInt(this.value)||null;renderRouteStatement()">'+routeOpts+'</select>'
     + '</div></div></div>';
@@ -2928,14 +2944,15 @@ function renderRouteStatement() {
 
   // Load data for route customers for this month
   var mDeliveries = reportAllDeliveries.filter(function(d){
-    return routeCustomers.some(function(c){ return c.id===d.customer_id; }) && (d.delivery_date||'').startsWith(stmtRouteMonth);
+    return routeCustomers.some(function(c){ return c.id===d.customer_id; }) && (d.delivery_date||'')>=routeFromDate && (d.delivery_date||'')<=routeToDate;
   });
   var mTopups = reportAllTopups.filter(function(t){
-    return routeCustomers.some(function(c){ return c.id===t.customer_id; }) && (t.topup_date||'').startsWith(stmtRouteMonth);
+    return routeCustomers.some(function(c){ return c.id===t.customer_id; }) && (t.topup_date||'')>=routeFromDate && (t.topup_date||'')<=routeToDate;
   });
 
-  if (reportAllDeliveries.length === 0 || !reportAllDeliveries[0] || !(reportAllDeliveries[0].delivery_date||'').startsWith(stmtRouteMonth)) {
-    // Need to load data for this month
+  // Always reload if month changed or no data
+  var routeKey = routeFromDate+'_'+routeToDate;
+  if (!window._routeDataMonth || window._routeDataMonth !== routeKey) {
     body.innerHTML = html + '<div style="padding:20px;color:var(--text-muted)">Loading data...</div>';
     loadRouteReportData();
     return;
@@ -2979,9 +2996,30 @@ function renderRouteStatement() {
 }
 
 async function loadRouteReportData() {
-  try { reportAllDeliveries = await db.get('gs_deliveries','delivery_date=gte.'+stmtRouteMonth+'-01&delivery_date=lte.'+stmtRouteMonth+'-31&order=delivery_date.asc'); } catch(e){ reportAllDeliveries=[]; }
-  try { reportAllTopups = await db.get('gs_topups','topup_date=gte.'+stmtRouteMonth+'-01&topup_date=lte.'+stmtRouteMonth+'-31&order=topup_date.asc'); } catch(e){ reportAllTopups=[]; }
+  var routeKey = routeFromDate+'_'+routeToDate;
+  try { reportAllDeliveries = await db.get('gs_deliveries','delivery_date=gte.'+routeFromDate+'&delivery_date=lte.'+routeToDate+'&order=delivery_date.asc'); } catch(e){ reportAllDeliveries=[]; }
+  try { reportAllTopups = await db.get('gs_topups','topup_date=gte.'+routeFromDate+'&topup_date=lte.'+routeToDate+'&order=topup_date.asc'); } catch(e){ reportAllTopups=[]; }
+  window._routeDataMonth = routeKey;
+  window._customerDataMonth = null;
   renderRouteStatement();
+}
+
+function setRoutePeriod(period) {
+  var today = todayStr();
+  if (period===2) { routeFromDate=today; routeToDate=today; }
+  else if (period===1) { var d=new Date(); d.setDate(d.getDate()-d.getDay()); routeFromDate=d.toISOString().split('T')[0]; routeToDate=today; }
+  else { routeFromDate=today.slice(0,7)+'-01'; routeToDate=today; }
+  window._routeDataMonth=null;
+  renderRouteStatement();
+}
+
+function setCustPeriod(period) {
+  var today = todayStr();
+  if (period===2) { custFromDate=today; custToDate=today; }
+  else if (period===1) { var d=new Date(); d.setDate(d.getDate()-d.getDay()); custFromDate=d.toISOString().split('T')[0]; custToDate=today; }
+  else { custFromDate=today.slice(0,7)+'-01'; custToDate=today; }
+  window._customerDataMonth=null;
+  renderMonthlyStatement();
 }
 
 function exportRouteStatCSV() {
@@ -3002,7 +3040,7 @@ function exportRouteStatCSV() {
   });
   var lines = rows.map(function(r){ return r.map(function(x){ return '"'+String(x||'').replace(/"/g,'""')+'"';}).join(',');});
   var blob = new Blob([lines.join(String.fromCharCode(13,10))],{type:'text/csv'});
-  var a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='route-stmt-'+stmtRouteMonth+'.csv'; a.click();
+  var a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='route-stmt-'+routeFromDate+'-to-'+routeToDate+'.csv'; a.click();
 }
 
 function exportRouteStatPDF() {
@@ -3012,8 +3050,8 @@ function exportRouteStatPDF() {
   var rows='';
   var tL=0,tA=0,tT=0;
   routeCustomers.forEach(function(c){
-    var cDel=reportAllDeliveries.filter(function(d){ return d.customer_id===c.id&&(d.delivery_date||'').startsWith(stmtRouteMonth);});
-    var cTop=reportAllTopups.filter(function(t){ return String(t.customer_id)===String(c.id)&&(t.topup_date||'').startsWith(stmtRouteMonth);});
+    var cDel=reportAllDeliveries.filter(function(d){ return d.customer_id===c.id&&(d.delivery_date||'')>=routeFromDate&&(d.delivery_date||'')<=routeToDate;});
+    var cTop=reportAllTopups.filter(function(t){ return String(t.customer_id)===String(c.id)&&(t.topup_date||'')>=routeFromDate&&(t.topup_date||'')<=routeToDate;});
     var w=getWallet(c.id);
     var cL=cDel.reduce(function(s,d){ return s+(d.qty_delivered||0);},0);
     var cA=cDel.reduce(function(s,d){ return s+(d.amount_deducted||0);},0);
@@ -3031,7 +3069,7 @@ function exportRouteStatPDF() {
     +'table{width:100%;border-collapse:collapse;margin-top:12px}th{background:#085041;color:#fff;padding:7px;text-align:left;font-size:11px}'
     +'td{padding:6px 8px;border-bottom:1px solid #ddd}tfoot td{font-weight:bold;background:#f5f5f5}</style></head><body>'
     +'<h1>Route Statement: '+esc(route.name)+'</h1>'
-    +'<div style="color:#444;margin-bottom:12px">Month: '+stmtRouteMonth+(route.milkman?' &middot; Milkman: '+esc(route.milkman):'')+'</div>'
+    +'<div style="color:#444;margin-bottom:12px">Period: '+fmtDate(routeFromDate)+' to '+fmtDate(routeToDate)+(route.milkman?' &middot; Milkman: '+esc(route.milkman):'')+'</div>'
     +'<table><thead><tr><th>Customer</th><th>Quota</th><th>Delivered</th><th>Deducted</th><th>Top-ups</th><th>Balance</th></tr></thead>'
     +'<tbody>'+rows+'</tbody>'
     +'<tfoot><tr><td>TOTAL</td><td></td><td>'+tL.toFixed(1)+'L</td><td style="color:red">Rs.'+tA.toFixed(0)+'</td><td style="color:green">Rs.'+tT.toFixed(0)+'</td><td></td></tr></tfoot>'
@@ -3042,6 +3080,14 @@ function exportRouteStatPDF() {
 }
 
 function renderMonthlyStatement() {
+  // Load data if month changed or no data
+  var custKey = custFromDate+'_'+custToDate;
+  if (!window._customerDataMonth || window._customerDataMonth !== custKey) {
+    var body2 = showReportBody();
+    if (body2) body2.innerHTML = '<div style="padding:20px;color:var(--text-muted)">Loading data...</div>';
+    loadReportData();
+    return;
+  }
   var targetEl = document.getElementById('report-body') || document.getElementById('content');
   var today = todayStr();
   var custOpts = '<option value="">-- Select Customer --</option>'
@@ -3054,8 +3100,14 @@ function renderMonthlyStatement() {
   var html = '<div class="card" style="margin-bottom:16px">';
   html += '<div class="card-header"><div class="card-title">Customer Statement</div></div>';
   html += '<div style="padding:16px;display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">';
-  html += '<div><label class="flabel" style="display:block;margin-bottom:5px">Month</label>';
-  html += '<input type="month" value="'+reportMonth+'" style="padding:8px 11px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:inherit;outline:none" onchange="reportMonth=this.value;loadReportData()" onclick="event.stopPropagation()">';
+  html += '<div><label class="flabel" style="display:block;margin-bottom:5px">From Date</label>';
+  html += '<input type="date" value="'+custFromDate+'" max="'+todayStr()+'" style="padding:8px 11px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:inherit;outline:none" onchange="custFromDate=this.value;window._customerDataMonth=null;renderMonthlyStatement()">';
+  html += '</div>';
+  html += '<div><label class="flabel" style="display:block;margin-bottom:5px">To Date</label>';
+  html += '<input type="date" value="'+custToDate+'" max="'+todayStr()+'" style="padding:8px 11px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:inherit;outline:none" onchange="custToDate=this.value;window._customerDataMonth=null;renderMonthlyStatement()">';
+  html += '</div>';
+  html += '<div><label class="flabel" style="display:block;margin-bottom:5px">Quick Select</label>';
+  html += '<div style="display:flex;gap:4px"><button class="btn btn-outline btn-xs" onclick="setCustPeriod(0)">This Month</button><button class="btn btn-outline btn-xs" onclick="setCustPeriod(1)">This Week</button><button class="btn btn-outline btn-xs" onclick="setCustPeriod(2)">Today</button></div>';
   html += '</div>';
   html += '<div style="flex:1;min-width:220px"><label class="flabel" style="display:block;margin-bottom:5px">Customer</label>';
   html += '<select style="width:100%;padding:8px 11px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:inherit;outline:none;background:var(--surface)" onchange="reportCustomerId=parseInt(this.value)||null;renderMonthlyStatement()" onclick="event.stopPropagation()">'+custOpts+'</select>';
@@ -3072,14 +3124,14 @@ function renderMonthlyStatement() {
   if (!c) { document.getElementById('content').innerHTML = html; return; }
 
   var route = routes.find(function(r){ return r.id===c.route_id; });
-  var rate = getRateForDate(reportMonth+'-01');
+  var rate = getRateForDate(custFromDate);
 
   // Filter deliveries and topups for this customer and month
   var monthDeliveries = reportAllDeliveries.filter(function(d){
-    return String(d.customer_id)===String(reportCustomerId) && (d.delivery_date||'').startsWith(reportMonth);
+    return String(d.customer_id)===String(reportCustomerId) && (d.delivery_date||'')>=custFromDate && (d.delivery_date||'')<=custToDate;
   });
   var monthTopups = reportAllTopups.filter(function(t){
-    return String(t.customer_id)===String(reportCustomerId) && (t.topup_date||'').startsWith(reportMonth);
+    return String(t.customer_id)===String(reportCustomerId) && (t.topup_date||'')>=custFromDate && (t.topup_date||'')<=custToDate;
   });
 
   // Build date-wise transaction rows
@@ -3154,7 +3206,7 @@ function renderMonthlyStatement() {
   html += '<div>';
   html += '<div style="font-size:18px;font-weight:700">'+esc(c.first_name||'')+' '+esc(c.last_name||'')+'</div>';
   html += '<div style="font-size:12px;color:var(--text-muted);margin-top:3px">'+esc(c.customer_code||'')+' &middot; '+(route?esc(route.name):'No route')+' &middot; '+(c.morning_quota||0)+'L morn + '+(c.evening_quota||0)+'L eve</div>';
-  html += '<div style="font-size:12px;color:var(--text-muted);margin-top:2px">Statement for: <strong>'+reportMonth+'</strong> &middot; Rate: Rs.'+rate+'/L</div>';
+  html += '<div style="font-size:12px;color:var(--text-muted);margin-top:2px">Period: <strong>'+fmtDate(custFromDate)+' to '+fmtDate(custToDate)+'</strong> &middot; Rate: Rs.'+rate+'/L</div>';
   html += '</div>';
   html += '<div style="display:flex;gap:8px">';
   html += '<button class="btn btn-outline btn-sm" onclick="exportStatementCSV()">Export CSV</button>';
@@ -3189,12 +3241,15 @@ async function loadReportData() {
   window._reportTab = 'statement';
   var body = showReportBody();
   if (body) body.innerHTML = '<div style="padding:20px;color:var(--text-muted)">Loading...</div>';
+  var custKey2 = custFromDate+'_'+custToDate;
   try {
-    reportAllDeliveries = await db.get('gs_deliveries', 'delivery_date=gte.'+reportMonth+'-01&delivery_date=lte.'+reportMonth+'-31&order=delivery_date.asc');
+    reportAllDeliveries = await db.get('gs_deliveries', 'delivery_date=gte.'+custFromDate+'&delivery_date=lte.'+custToDate+'&order=delivery_date.asc');
   } catch(e) { reportAllDeliveries = []; }
   try {
-    reportAllTopups = await db.get('gs_topups', 'topup_date=gte.'+reportMonth+'-01&topup_date=lte.'+reportMonth+'-31&order=topup_date.asc');
+    reportAllTopups = await db.get('gs_topups', 'topup_date=gte.'+custFromDate+'&topup_date=lte.'+custToDate+'&order=topup_date.asc');
   } catch(e) { reportAllTopups = []; }
+  window._customerDataMonth = custKey2;
+  window._routeDataMonth = null; // invalidate route cache
   renderMonthlyStatement();
 }
 
@@ -3229,7 +3284,7 @@ function exportStatementCSV() {
   var blob = new Blob([lines.join(String.fromCharCode(13,10))],{type:'text/csv'});
   var a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'statement-'+esc(c.customer_code||c.id)+'-'+reportMonth+'.csv';
+  a.download = 'statement-'+esc(c.customer_code||c.id)+'-'+custFromDate+'-to-'+custToDate+'.csv';
   a.click();
 }
 
