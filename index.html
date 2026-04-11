@@ -2309,7 +2309,7 @@ function buildSeqRows() {
     var row = document.createElement('div');
     row.className = 'seq-row' + (isSkipped?' skipped-day':'');
     row.draggable = true;
-    row.dataset.i = i;
+    row.dataset.cid = c.id;  // use customer ID not index
 
     row.innerHTML = '<span class="seq-handle" title="Drag to reorder">&#9776;</span>'
       + '<div style="min-width:26px;height:26px;border-radius:50%;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0">'+(i+1)+'</div>'
@@ -2321,9 +2321,9 @@ function buildSeqRows() {
       + (isSkipped ? '<span class="badge badge-Paused" style="font-size:10px">'+(isOnPause(c,today)?'Paused':'Off today')+'</span>' : '');
 
     row.addEventListener('dragstart', function(e) {
-      seqDragFrom = parseInt(this.dataset.i);
+      seqDragFrom = this.dataset.cid;
       e.dataTransfer.effectAllowed = 'move';
-      e.dataTransfer.setData('text', String(seqDragFrom));
+      e.dataTransfer.setData('text/plain', this.dataset.cid);
       var self = this;
       setTimeout(function(){ self.classList.add('dragging'); }, 0);
     });
@@ -2342,12 +2342,15 @@ function buildSeqRows() {
     row.addEventListener('drop', function(e) {
       e.preventDefault();
       e.stopPropagation();
-      this.classList.remove('drag-over');
-      var from = seqDragFrom;
-      var to = parseInt(this.dataset.i);
-      if (from === null || from === to) return;
-      var moved = seqCustomers.splice(from, 1)[0];
-      seqCustomers.splice(to, 0, moved);
+      document.querySelectorAll('.seq-row').forEach(function(r){ r.classList.remove('drag-over'); });
+      var fromCid = String(seqDragFrom);
+      var toCid   = String(this.dataset.cid);
+      if (!fromCid || fromCid === toCid) return;
+      var fromIdx = seqCustomers.findIndex(function(x){ return String(x.id)===fromCid; });
+      var toIdx   = seqCustomers.findIndex(function(x){ return String(x.id)===toCid; });
+      if (fromIdx === -1 || toIdx === -1) return;
+      var moved = seqCustomers.splice(fromIdx, 1)[0];
+      seqCustomers.splice(toIdx, 0, moved);
       seqNormalise();
       buildSeqRows();
     });
