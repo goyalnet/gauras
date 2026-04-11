@@ -646,6 +646,7 @@ function go(page) {
   else if (page === 'masters') renderMasters();
   else if (page === 'wallet') renderWallet();
   else if (page === 'delivery') renderDelivery();
+  else if (page === 'reports') { window._reportTab='summary'; renderReports(); }
   else document.getElementById('content').innerHTML = '<div class="empty"><div class="empty-icon">🚧</div><p>Coming in a future phase.</p></div>';
 }
 
@@ -2095,7 +2096,8 @@ function renderDelivery() {
 
   var html = resumeHtml;
   html += '<div class="del-hero">';
-  html += '<div><div style="font-size:12px;opacity:0.7;margin-bottom:4px">'+dow+', '+todayFmt+(isToday?'':' <span style="background:rgba(255,255,255,0.2);padding:2px 8px;border-radius:10px;font-size:11px">Past</span>')+'</div>';
+  var pastBadge = isToday ? '' : ' <span style="background:rgba(255,255,255,0.25);padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600">PAST DATE</span>';
+  html += '<div><div style="font-size:12px;opacity:0.7;margin-bottom:4px">'+dow+', '+todayFmt+pastBadge+'</div>';
   html += '<div style="font-size:18px;font-weight:700">'+esc(route?route.name:'')+'</div>';
   html += '<div style="font-size:13px;opacity:0.75;margin-top:2px">'+done+' of '+total+' done &middot; '+totalLitres.toFixed(1)+'L delivered &middot; Rs.'+totalDeducted.toFixed(0)+' deducted &middot; '+totalEmpties+' empties</div></div>';
   html += '<div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end">';
@@ -2560,6 +2562,499 @@ async function editBottleLog(logId) {
     toast('Bottle log updated', 'success');
     renderDelivery();
   } catch(e) { toast('Error: '+e.message, 'error'); }
+}
+
+// ══════════════════════════════════════
+// REPORTS MODULE
+// ══════════════════════════════════════
+
+let reportMonth = new Date().toISOString().slice(0,7); // YYYY-MM
+let reportCustomerId = null;
+let reportAllDeliveries = []; // loaded for selected month
+let reportAllTopups = [];
+let summaryDate = todayStr ? todayStr() : new Date().toISOString().split('T')[0];
+let summaryDeliveries = [];
+let summaryTopups = [];
+let summaryBottleLogs = [];
+let expandedRoutes = {}; // routeId -> true/false
+
+function renderReports() {
+  // Show tab selector
+  var activeTab = window._reportTab || 'summary';
+  document.getElementById('content').innerHTML =
+    '<div class="tabs" style="margin-bottom:0">'
+    + '<div class="tab'+(activeTab==='summary'?' active':'')+'" onclick="setReportTab(0)">Daily Summary</div>'
+    + '<div class="tab'+(activeTab==='statement'?' active':'')+'" onclick="setReportTab(1)">Monthly Statement</div>'
+    + '</div>'
+    + '<div id="report-body" style="margin-top:0"></div>';
+  if (activeTab==='summary') loadSummaryData();
+  else loadReportData();
+}
+
+async function loadSummaryData() {
+  window._reportTab = 'summary';
+  try { summaryDeliveries = await db.get('gs_deliveries','delivery_date=eq.'+summaryDate+'&order=route_id.asc'); } catch(e){ summaryDeliveries=[]; }
+  try { summaryTopups = await db.get('gs_topups','topup_date=eq.'+summaryDate); } catch(e){ summaryTopups=[]; }
+  try { summaryBottleLogs = await db.get('gs_bottle_log','log_date=eq.'+summaryDate); } catch(e){ summaryBottleLogs=[]; }
+  renderDailySummary();
+}
+
+function setReportTab(tab) {
+  window._reportTab = (tab===0||tab==='summary') ? 'summary' : 'statement';
+  if (window._reportTab === 'summary') loadSummaryData();
+  else loadReportData();
+}
+
+function renderDailySummary() {
+  var dow = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date(summaryDate).getDay()];
+  var isToday = summaryDate === todayStr();
+
+  // Overall totals
+  var totLitres = summaryDeliveries.reduce(function(s,d){ return s+(d.qty_delivered||0);},0);
+  var totAmt    = summaryDeliveries.reduce(function(s,d){ return s+(d.amount_deducted||0);},0);
+  var totEmp    = summaryDeliveries.reduce(function(s,d){ return s+(d.empty_bottles||0);},0);
+  var totTopup  = summaryTopups.reduce(function(s,t){ return s+(t.amount||0);},0);
+  var totCust   = summaryDeliveries.filter(function(d){ return d.status!=='Not Delivered';}).map(function(d){ return d.customer_id; }).filter(function(v,i,a){ return a.indexOf(v)===i;}).length;
+  var totMissed = summaryDeliveries.filter(function(d){ return d.status==='Not Delivered';}).length;
+
+  var html = '';
+
+  // Date picker bar
+  html += '<div style="background:var(--brand-light);border-radius:var(--radius);padding:10px 16px;margin-bottom:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">';
+  html += '<span style="font-size:12px;font-weight:700;color:var(--brand-dark);text-transform:uppercase;letter-spacing:0.5px">'+dow+'</span>';
+  html += '<input type="date" value="'+summaryDate+'" max="'+todayStr()+'" style="padding:5px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;background:#fff;outline:none" onchange="summaryDate=this.value;loadSummaryData()">';
+  html += (!isToday ? '<button onclick="summaryDate=todayStr();loadSummaryData()" style="padding:5px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:#fff;color:var(--text-muted);cursor:pointer;font-family:inherit">&#8617; Today</button>' : '');
+  html += '<div style="margin-left:auto;display:flex;gap:8px">';
+  html += '<button class="btn btn-outline btn-sm" onclick="exportSummaryCSV()">Export CSV</button>';
+  html += '<button class="btn btn-primary btn-sm" onclick="exportSummaryPDF()">Export PDF</button>';
+  html += '</div></div>';
+
+  // Hero band - totals
+  html += '<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:16px">';
+  html += statBox('Customers Served', totCust, 'var(--brand)', '');
+  html += statBox('Litres Delivered', totLitres.toFixed(1)+'L', 'var(--brand)', '');
+  html += statBox('Amount Deducted', 'Rs.'+totAmt.toFixed(0), 'var(--danger)', '');
+  html += statBox('Top-ups Received', 'Rs.'+totTopup.toFixed(0), 'var(--brand-mid)', summaryTopups.length+' payments');
+  html += statBox('Empty Bottles', totEmp, '#0C447C', 'collected from customers');
+  html += statBox('Not Delivered', totMissed, totMissed>0?'var(--accent)':'var(--text-hint)', 'entries');
+  html += '</div>';
+
+  // Per-route rows
+  html += '<div class="card">';
+  html += '<div class="card-header"><div class="card-title">Route-wise Breakdown</div><div style="font-size:12px;color:var(--text-muted)">Click any route to expand details</div></div>';
+
+  if (routes.length === 0) {
+    html += '<div class="empty"><p>No routes found.</p></div>';
+  } else {
+    routes.forEach(function(route) {
+      var rd = summaryDeliveries.filter(function(d){ return String(d.route_id)===String(route.id); });
+      var rb = summaryBottleLogs.filter(function(b){ return String(b.route_id)===String(route.id); });
+      var rLitres  = rd.reduce(function(s,d){ return s+(d.qty_delivered||0);},0);
+      var rAmt     = rd.reduce(function(s,d){ return s+(d.amount_deducted||0);},0);
+      var rEmp     = rd.reduce(function(s,d){ return s+(d.empty_bottles||0);},0);
+      var rServed  = rd.filter(function(d){ return d.status!=='Not Delivered';}).map(function(d){ return d.customer_id;}).filter(function(v,i,a){ return a.indexOf(v)===i;}).length;
+      var rMissed  = rd.filter(function(d){ return d.status==='Not Delivered';}).length;
+      var rBottleOut = rb.reduce(function(s,b){ return s+(b.filled_out||0);},0);
+      var rBottleRet = rb.reduce(function(s,b){ return s+(b.filled_returned||0);},0);
+      var isExpanded = expandedRoutes[route.id];
+      var hasData = rd.length > 0;
+
+      html += '<div style="border-bottom:1px solid var(--border)">';
+      // Route summary row
+      html += '<div onclick="expandedRoutes['+route.id+']=!expandedRoutes['+route.id+'];renderDailySummary()" '
+        + 'style="padding:14px 18px;display:flex;align-items:center;gap:16px;cursor:pointer;'+(hasData?'':'opacity:0.5')+'">';
+      html += '<span style="font-size:16px">'+(isExpanded?'▼':'▶')+'</span>';
+      html += '<div style="flex:1"><div style="font-weight:700;font-size:14px">'+esc(route.name)+'</div>';
+      html += '<div style="font-size:12px;color:var(--text-muted)">'+esc(route.milkman||'')+(route.area?' &middot; '+esc(route.area):'')+'</div></div>';
+      html += '<div style="display:flex;gap:20px;flex-wrap:wrap">';
+      html += '<div style="text-align:center"><div style="font-size:16px;font-weight:700;color:var(--brand)">'+rServed+'</div><div style="font-size:10px;color:var(--text-muted)">served</div></div>';
+      html += '<div style="text-align:center"><div style="font-size:16px;font-weight:700;color:var(--brand)">'+rLitres.toFixed(1)+'L</div><div style="font-size:10px;color:var(--text-muted)">delivered</div></div>';
+      html += '<div style="text-align:center"><div style="font-size:16px;font-weight:700;color:var(--danger)">Rs.'+rAmt.toFixed(0)+'</div><div style="font-size:10px;color:var(--text-muted)">deducted</div></div>';
+      html += '<div style="text-align:center"><div style="font-size:16px;font-weight:700;color:#0C447C">'+rEmp+'</div><div style="font-size:10px;color:var(--text-muted)">empties</div></div>';
+      if (rb.length>0) html += '<div style="text-align:center"><div style="font-size:16px;font-weight:700;color:var(--brand-mid)">'+rBottleOut+'/'+rBottleRet+'</div><div style="font-size:10px;color:var(--text-muted)">out/returned</div></div>';
+      if (rMissed>0) html += '<div style="text-align:center"><div style="font-size:16px;font-weight:700;color:var(--accent)">'+rMissed+'</div><div style="font-size:10px;color:var(--text-muted)">missed</div></div>';
+      html += '</div></div>';
+
+      // Expanded detail
+      if (isExpanded && rd.length > 0) {
+        html += '<div style="background:var(--bg);padding:0 18px 14px">';
+        html += '<div class="tbl-wrap"><table>';
+        html += '<thead><tr><th>Customer</th><th>Session</th><th>Qty</th><th>Status</th><th>Deducted</th><th>Empties</th><th>Balance After</th></tr></thead><tbody>';
+        // Group by customer
+        var custIds = rd.map(function(d){ return d.customer_id;}).filter(function(v,i,a){ return a.indexOf(v)===i;});
+        custIds.forEach(function(cid) {
+          var c = customers.find(function(x){ return x.id===cid;});
+          var cDeliveries = rd.filter(function(d){ return d.customer_id===cid;});
+          var w = getWallet(cid);
+          cDeliveries.forEach(function(d,di) {
+            var statusColor = d.status==='Delivered'?'var(--brand)':d.status==='Partial'?'var(--accent)':'var(--danger)';
+            html += '<tr>';
+            if (di===0) html += '<td rowspan="'+cDeliveries.length+'" style="font-weight:600">'+esc(c?c.first_name+' '+c.last_name:'Unknown')+'<div class="td-sub">'+esc(c?c.customer_code||'':'')+'</div></td>';
+            html += '<td>'+esc(d.session||'')+'</td>';
+            html += '<td>'+(d.qty_delivered||0)+'L</td>';
+            html += '<td><span style="color:'+statusColor+';font-weight:600;font-size:12px">'+esc(d.status||'')+'</span>'+(d.reason?'<div class="td-sub">'+esc(d.reason)+'</div>':'')+'</td>';
+            html += '<td style="color:var(--danger)">Rs.'+(d.amount_deducted||0).toFixed(0)+'</td>';
+            html += '<td>'+(d.empty_bottles||0)+'</td>';
+            if (di===0) html += '<td rowspan="'+cDeliveries.length+'" style="font-weight:600;color:'+(w.balance>=0?'var(--brand)':'var(--danger)')+'">Rs.'+(w.balance||0).toFixed(0)+'</td>';
+            html += '</tr>';
+          });
+        });
+        html += '</tbody></table></div>';
+
+        // Bottle log for this route
+        if (rb.length > 0) {
+          html += '<div style="margin-top:10px;display:flex;gap:16px;flex-wrap:wrap;padding:10px;background:#fff;border-radius:8px;border:1px solid var(--border)">';
+          html += '<div style="font-size:12px;font-weight:700;color:var(--brand-dark);width:100%">🍼 Bottle Log</div>';
+          rb.forEach(function(b){
+            html += '<div style="font-size:12px"><strong>'+esc(b.session)+'</strong>: '
+              +b.filled_out+' out &middot; '
+              +b.filled_returned+' filled returned &middot; '
+              +b.empty_collected+' empty collected</div>';
+          });
+          html += '</div>';
+        }
+        html += '</div>';
+      } else if (isExpanded && rd.length===0) {
+        html += '<div style="padding:12px 18px;color:var(--text-hint);font-size:13px;background:var(--bg)">No deliveries recorded for this route on '+fmtDate(summaryDate)+'</div>';
+      }
+      html += '</div>';
+    });
+  }
+  html += '</div>';
+
+  // Top-ups section
+  if (summaryTopups.length > 0) {
+    html += '<div class="card" style="margin-top:16px">';
+    html += '<div class="card-header"><div class="card-title">Top-ups Received Today</div><div style="font-size:12px;color:var(--text-muted)">Rs.'+totTopup.toFixed(0)+' total &middot; '+summaryTopups.length+' payments</div></div>';
+    html += '<div class="tbl-wrap"><table><thead><tr><th>Customer</th><th>Amount</th><th>Mode</th><th>Reference</th><th>Recorded By</th></tr></thead><tbody>';
+    summaryTopups.forEach(function(t){
+      var c = customers.find(function(x){ return String(x.id)===String(t.customer_id);});
+      html += '<tr><td><div class="td-primary">'+esc(c?c.first_name+' '+c.last_name:'Unknown')+'</div><div class="td-sub">'+esc(c?c.customer_code||'':'')+'</div></td>'
+        +'<td style="font-weight:700;color:var(--brand)">Rs.'+(t.amount||0)+'</td>'
+        +'<td>'+esc(t.payment_mode||'')+'</td>'
+        +'<td>'+esc(t.reference_no||'--')+'</td>'
+        +'<td>'+esc(t.recorded_by||'--')+'</td></tr>';
+    });
+    html += '</tbody></table></div></div>';
+  }
+
+  document.getElementById('report-body').innerHTML = html;
+}
+
+function statBox(label, val, color, sub) {
+  return '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px">'
+    +'<div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">'+label+'</div>'
+    +'<div style="font-size:20px;font-weight:700;color:'+color+'">'+val+'</div>'
+    +(sub?'<div style="font-size:10px;color:var(--text-hint);margin-top:2px">'+sub+'</div>':'')
+    +'</div>';
+}
+
+function exportSummaryCSV() {
+  var hdr = ['Route','Session','Customer','Code','Qty(L)','Status','Deducted(Rs)','Empties','Reason'];
+  var rows = [hdr];
+  routes.forEach(function(route){
+    var rd = summaryDeliveries.filter(function(d){ return String(d.route_id)===String(route.id);});
+    rd.forEach(function(d){
+      var c = customers.find(function(x){ return x.id===d.customer_id;});
+      rows.push([route.name, d.session||'', c?c.first_name+' '+c.last_name:'', c?c.customer_code||'':'', d.qty_delivered||0, d.status||'', d.amount_deducted||0, d.empty_bottles||0, d.reason||'']);
+    });
+  });
+  var lines = rows.map(function(r){ return r.map(function(x){ return '"'+String(x||'').replace(/"/g,'""')+'"';}).join(',');});
+  var blob = new Blob([lines.join(String.fromCharCode(13,10))],{type:'text/csv'});
+  var a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='daily-summary-'+summaryDate+'.csv'; a.click();
+}
+
+function exportSummaryPDF() {
+  var dow = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date(summaryDate).getDay()];
+  var totLitres=summaryDeliveries.reduce(function(s,d){ return s+(d.qty_delivered||0);},0);
+  var totAmt=summaryDeliveries.reduce(function(s,d){ return s+(d.amount_deducted||0);},0);
+  var totEmp=summaryDeliveries.reduce(function(s,d){ return s+(d.empty_bottles||0);},0);
+  var totTopup=summaryTopups.reduce(function(s,t){ return s+(t.amount||0);},0);
+  var routeRows='';
+  routes.forEach(function(route){
+    var rd=summaryDeliveries.filter(function(d){ return String(d.route_id)===String(route.id);});
+    var rL=rd.reduce(function(s,d){ return s+(d.qty_delivered||0);},0);
+    var rA=rd.reduce(function(s,d){ return s+(d.amount_deducted||0);},0);
+    var rE=rd.reduce(function(s,d){ return s+(d.empty_bottles||0);},0);
+    var rS=rd.filter(function(d){ return d.status!=='Not Delivered';}).map(function(d){ return d.customer_id;}).filter(function(v,i,a){ return a.indexOf(v)===i;}).length;
+    var rM=rd.filter(function(d){ return d.status==='Not Delivered';}).length;
+    routeRows+='<tr><td>'+esc(route.name)+'</td><td>'+rS+'</td><td>'+rL.toFixed(1)+'L</td><td>Rs.'+rA.toFixed(0)+'</td><td>'+rE+'</td><td>'+(rM>0?'<span style="color:orange">'+rM+'</span>':'0')+'</td></tr>';
+  });
+  var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Daily Summary</title>'
+    +'<style>body{font-family:Arial,sans-serif;font-size:12px;padding:20px}h1{font-size:18px;margin:0 0 4px}'
+    +'table{width:100%;border-collapse:collapse;margin-top:12px}th{background:#085041;color:#fff;padding:8px;text-align:left;font-size:11px}'
+    +'td{padding:7px 8px;border-bottom:1px solid #ddd}.hero{display:flex;gap:12px;margin:12px 0;flex-wrap:wrap}'
+    +'.hbox{border:1px solid #ddd;border-radius:6px;padding:10px 14px;min-width:100px}'
+    +'.hl{font-size:10px;color:#666;text-transform:uppercase;margin-bottom:3px}.hv{font-size:18px;font-weight:bold}'
+    +'tfoot td{font-weight:bold;background:#f5f5f5}</style></head><body>'
+    +'<h1>GauRas -- Daily Summary Report</h1>'
+    +'<div style="color:#444;margin-bottom:8px">'+dow+', '+fmtDate(summaryDate)+'</div>'
+    +'<div class="hero">'
+    +'<div class="hbox"><div class="hl">Litres Delivered</div><div class="hv" style="color:#0F6E56">'+totLitres.toFixed(1)+'L</div></div>'
+    +'<div class="hbox"><div class="hl">Amount Deducted</div><div class="hv" style="color:#A32D2D">Rs.'+totAmt.toFixed(0)+'</div></div>'
+    +'<div class="hbox"><div class="hl">Top-ups Received</div><div class="hv" style="color:#0F6E56">Rs.'+totTopup.toFixed(0)+'</div></div>'
+    +'<div class="hbox"><div class="hl">Empty Bottles</div><div class="hv">'+totEmp+'</div></div>'
+    +'</div>'
+    +'<table><thead><tr><th>Route</th><th>Served</th><th>Litres</th><th>Deducted</th><th>Empties</th><th>Missed</th></tr></thead>'
+    +'<tbody>'+routeRows+'</tbody>'
+    +'<tfoot><tr><td>TOTAL</td><td></td><td>'+totLitres.toFixed(1)+'L</td><td>Rs.'+totAmt.toFixed(0)+'</td><td>'+totEmp+'</td><td></td></tr></tfoot>'
+    +'</table>'
+    +'<p style="margin-top:20px;font-size:10px;color:#888">Generated on '+fmtDate(todayStr())+' &middot; GauRas Milk Distribution</p>'
+    +'</body></html>';
+  var win=window.open('','_blank'); win.document.write(html); win.document.close(); win.print();
+}
+
+function renderMonthlyStatement() {
+  var targetEl = document.getElementById('report-body') || document.getElementById('content');
+  var today = todayStr();
+  var custOpts = '<option value="">-- Select Customer --</option>'
+    + customers.slice().sort(function(a,b){ return ((a.first_name||'')+(a.last_name||'')).localeCompare((b.first_name||'')+(b.last_name||'')); })
+      .map(function(c){ return '<option value="'+c.id+'"'+(reportCustomerId==c.id?' selected':'')+'>'+esc(c.first_name||'')+' '+esc(c.last_name||'')+' ('+esc(c.customer_code||'')+')</option>'; }).join('');
+
+  var html = '<div class="card" style="margin-bottom:16px">';
+  html += '<div class="card-header"><div class="card-title">Monthly Statement</div></div>';
+  html += '<div style="padding:16px;display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">';
+  html += '<div><label class="flabel" style="display:block;margin-bottom:5px">Month</label>';
+  html += '<input type="month" value="'+reportMonth+'" style="padding:8px 11px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:inherit;outline:none" onchange="reportMonth=this.value;renderReports()">';
+  html += '</div>';
+  html += '<div style="flex:1;min-width:220px"><label class="flabel" style="display:block;margin-bottom:5px">Customer</label>';
+  html += '<select style="width:100%;padding:8px 11px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:inherit;outline:none;background:var(--surface)" onchange="reportCustomerId=parseInt(this.value)||null;renderReports()">'+custOpts+'</select>';
+  html += '</div>';
+  html += '</div></div>';
+
+  if (!reportCustomerId) {
+    html += '<div class="empty"><div class="empty-icon">📋</div><p>Select a customer above to view their monthly statement.</p></div>';
+    document.getElementById('content').innerHTML = html;
+    return;
+  }
+
+  var c = customers.find(function(x){ return x.id===reportCustomerId; });
+  if (!c) { document.getElementById('content').innerHTML = html; return; }
+
+  var route = routes.find(function(r){ return r.id===c.route_id; });
+  var rate = getRateForDate(reportMonth+'-01');
+
+  // Filter deliveries and topups for this customer and month
+  var monthDeliveries = reportAllDeliveries.filter(function(d){
+    return String(d.customer_id)===String(reportCustomerId) && (d.delivery_date||'').startsWith(reportMonth);
+  });
+  var monthTopups = reportAllTopups.filter(function(t){
+    return String(t.customer_id)===String(reportCustomerId) && (t.topup_date||'').startsWith(reportMonth);
+  });
+
+  // Build date-wise transaction rows
+  // Collect all unique dates in month that have activity
+  var allDates = {};
+  monthDeliveries.forEach(function(d){ allDates[d.delivery_date] = true; });
+  monthTopups.forEach(function(t){ allDates[t.topup_date] = true; });
+  var sortedDates = Object.keys(allDates).sort();
+
+  // Calculate opening balance (wallet balance minus all transactions after month start)
+  var w = getWallet(c.id);
+  var currentBal = w.balance || 0;
+  // Work backwards: currentBal + all deductions after month - all topups after month = opening of month
+  var afterMonthDeductions = reportAllDeliveries.filter(function(d){
+    return String(d.customer_id)===String(reportCustomerId) && (d.delivery_date||'') > reportMonth+'-31';
+  }).reduce(function(s,d){ return s+(d.amount_deducted||0); }, 0);
+  var afterMonthTopups = reportAllTopups.filter(function(t){
+    return String(t.customer_id)===String(reportCustomerId) && (t.topup_date||'') > reportMonth+'-31';
+  }).reduce(function(s,t){ return s+(t.amount||0); }, 0);
+  var openingBal = currentBal + afterMonthDeductions - afterMonthTopups;
+
+  // Build running balance row by row
+  var runBal = openingBal;
+  var totalDeducted = 0;
+  var totalTopups = 0;
+  var totalQty = 0;
+
+  var rows = '';
+  sortedDates.forEach(function(date) {
+    var dayDeliveries = monthDeliveries.filter(function(d){ return d.delivery_date===date; });
+    var dayTopups = monthTopups.filter(function(t){ return t.topup_date===date; });
+
+    // Topups first
+    dayTopups.forEach(function(t) {
+      runBal += (t.amount||0);
+      totalTopups += (t.amount||0);
+      rows += '<tr style="background:#f0faf5">'
+        + '<td>'+fmtDate(date)+'</td>'
+        + '<td colspan="3"><span class="badge badge-Active">Top-up</span> '+esc(t.payment_mode||'Cash')+(t.reference_no?' &middot; '+esc(t.reference_no):'')+'</td>'
+        + '<td style="color:var(--brand);font-weight:700">+ Rs.'+( t.amount||0).toFixed(0)+'</td>'
+        + '<td style="font-weight:600">Rs.'+runBal.toFixed(0)+'</td>'
+        + '</tr>';
+    });
+
+    // Deliveries
+    dayDeliveries.forEach(function(d) {
+      var deduct = d.amount_deducted||0;
+      runBal -= deduct;
+      totalDeducted += deduct;
+      totalQty += (d.qty_delivered||0);
+      var statusColor = d.status==='Delivered'?'var(--brand)':d.status==='Partial'?'var(--accent)':'var(--danger)';
+      rows += '<tr>'
+        + '<td>'+fmtDate(date)+'</td>'
+        + '<td>'+esc(d.session||'')+'</td>'
+        + '<td>'+( d.qty_delivered||0)+'L</td>'
+        + '<td><span style="color:'+statusColor+';font-size:12px;font-weight:600">'+esc(d.status||'')+'</span></td>'
+        + '<td style="color:var(--danger)">- Rs.'+(deduct).toFixed(0)+'</td>'
+        + '<td style="font-weight:600">Rs.'+runBal.toFixed(0)+'</td>'
+        + '</tr>';
+    });
+  });
+
+  var closingBal = openingBal + totalTopups - totalDeducted;
+
+  if (rows === '') {
+    rows = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-hint)">No transactions for this month</td></tr>';
+  }
+
+  html += '<div class="card">';
+  // Customer header
+  html += '<div style="padding:18px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px">';
+  html += '<div>';
+  html += '<div style="font-size:18px;font-weight:700">'+esc(c.first_name||'')+' '+esc(c.last_name||'')+'</div>';
+  html += '<div style="font-size:12px;color:var(--text-muted);margin-top:3px">'+esc(c.customer_code||'')+' &middot; '+(route?esc(route.name):'No route')+' &middot; '+(c.morning_quota||0)+'L morn + '+(c.evening_quota||0)+'L eve</div>';
+  html += '<div style="font-size:12px;color:var(--text-muted);margin-top:2px">Statement for: <strong>'+reportMonth+'</strong> &middot; Rate: Rs.'+rate+'/L</div>';
+  html += '</div>';
+  html += '<div style="display:flex;gap:8px">';
+  html += '<button class="btn btn-outline btn-sm" onclick="exportStatementCSV()">Export CSV</button>';
+  html += '<button class="btn btn-primary btn-sm" onclick="exportStatementPDF()">Export PDF</button>';
+  html += '</div></div>';
+
+  // Summary cards
+  html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0;border-bottom:1px solid var(--border)">';
+  html += '<div style="padding:14px 16px;border-right:1px solid var(--border)"><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Opening Balance</div><div style="font-size:18px;font-weight:700;color:var(--brand)">Rs.'+openingBal.toFixed(0)+'</div></div>';
+  html += '<div style="padding:14px 16px;border-right:1px solid var(--border)"><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Total Deducted</div><div style="font-size:18px;font-weight:700;color:var(--danger)">Rs.'+totalDeducted.toFixed(0)+'</div><div style="font-size:11px;color:var(--text-hint)">'+totalQty.toFixed(1)+'L delivered</div></div>';
+  html += '<div style="padding:14px 16px;border-right:1px solid var(--border)"><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Total Top-ups</div><div style="font-size:18px;font-weight:700;color:var(--brand)">Rs.'+totalTopups.toFixed(0)+'</div></div>';
+  html += '<div style="padding:14px 16px"><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Closing Balance</div><div style="font-size:18px;font-weight:700;color:'+(closingBal>=0?'var(--brand)':'var(--danger)')+'">Rs.'+closingBal.toFixed(0)+'</div></div>';
+  html += '</div>';
+
+  // Transaction table
+  html += '<div class="tbl-wrap"><table>';
+  html += '<thead><tr><th>Date</th><th>Session</th><th>Qty</th><th>Status</th><th>Amount</th><th>Balance</th></tr></thead>';
+  html += '<tbody>'+rows+'</tbody>';
+  html += '<tfoot><tr style="background:var(--bg);font-weight:700">';
+  html += '<td colspan="2">Total</td>';
+  html += '<td>'+totalQty.toFixed(1)+'L</td>';
+  html += '<td></td>';
+  html += '<td>Rs.'+totalDeducted.toFixed(0)+' out &middot; Rs.'+totalTopups.toFixed(0)+' in</td>';
+  html += '<td>Rs.'+closingBal.toFixed(0)+'</td>';
+  html += '</tr></tfoot>';
+  html += '</table></div></div>';
+
+  targetEl.innerHTML = html;
+}
+
+async function loadReportData() {
+  window._reportTab = 'statement';
+  try {
+    reportAllDeliveries = await db.get('gs_deliveries', 'delivery_date=gte.'+reportMonth+'-01&delivery_date=lte.'+reportMonth+'-31&order=delivery_date.asc');
+  } catch(e) { reportAllDeliveries = []; }
+  try {
+    reportAllTopups = await db.get('gs_topups', 'topup_date=gte.'+reportMonth+'-01&topup_date=lte.'+reportMonth+'-31&order=topup_date.asc');
+  } catch(e) { reportAllTopups = []; }
+  renderReports();
+}
+
+function exportStatementCSV() {
+  var c = customers.find(function(x){ return x.id===reportCustomerId; });
+  if (!c) return;
+  var hdr = ['Date','Session','Qty(L)','Status','Deduction(Rs)','Topup(Rs)','Balance(Rs)'];
+  var rate = getRateForDate(reportMonth+'-01');
+  var monthDeliveries = reportAllDeliveries.filter(function(d){ return String(d.customer_id)===String(reportCustomerId); });
+  var monthTopups = reportAllTopups.filter(function(t){ return String(t.customer_id)===String(reportCustomerId); });
+  var allDates = {};
+  monthDeliveries.forEach(function(d){ allDates[d.delivery_date]=true; });
+  monthTopups.forEach(function(t){ allDates[t.topup_date]=true; });
+  var sortedDates = Object.keys(allDates).sort();
+  var w = getWallet(c.id);
+  var currentBal = w.balance||0;
+  var afterDeductions = reportAllDeliveries.filter(function(d){ return String(d.customer_id)===String(reportCustomerId)&&(d.delivery_date||'')>reportMonth+'-31'; }).reduce(function(s,d){ return s+(d.amount_deducted||0);},0);
+  var afterTopups = reportAllTopups.filter(function(t){ return String(t.customer_id)===String(reportCustomerId)&&(t.topup_date||'')>reportMonth+'-31'; }).reduce(function(s,t){ return s+(t.amount||0);},0);
+  var runBal = currentBal+afterDeductions-afterTopups;
+  var csvRows = [hdr];
+  sortedDates.forEach(function(date){
+    monthTopups.filter(function(t){ return t.topup_date===date; }).forEach(function(t){
+      runBal+=(t.amount||0);
+      csvRows.push([date,'','',' Top-up','',t.amount||0,runBal.toFixed(0)]);
+    });
+    monthDeliveries.filter(function(d){ return d.delivery_date===date; }).forEach(function(d){
+      runBal-=(d.amount_deducted||0);
+      csvRows.push([date,d.session||'',d.qty_delivered||0,d.status||'',d.amount_deducted||0,'',runBal.toFixed(0)]);
+    });
+  });
+  var lines = csvRows.map(function(r){ return r.map(function(x){ return '"'+String(x||'').replace(/"/g,'""')+'"'; }).join(','); });
+  var blob = new Blob([lines.join(String.fromCharCode(13,10))],{type:'text/csv'});
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'statement-'+esc(c.customer_code||c.id)+'-'+reportMonth+'.csv';
+  a.click();
+}
+
+function exportStatementPDF() {
+  var c = customers.find(function(x){ return x.id===reportCustomerId; });
+  if (!c) return;
+  var route = routes.find(function(r){ return r.id===c.route_id; });
+  var rate = getRateForDate(reportMonth+'-01');
+  var monthDeliveries = reportAllDeliveries.filter(function(d){ return String(d.customer_id)===String(reportCustomerId); });
+  var monthTopups = reportAllTopups.filter(function(t){ return String(t.customer_id)===String(reportCustomerId); });
+  var allDates = {};
+  monthDeliveries.forEach(function(d){ allDates[d.delivery_date]=true; });
+  monthTopups.forEach(function(t){ allDates[t.topup_date]=true; });
+  var sortedDates = Object.keys(allDates).sort();
+  var w = getWallet(c.id);
+  var currentBal = w.balance||0;
+  var afterDeductions = reportAllDeliveries.filter(function(d){ return String(d.customer_id)===String(reportCustomerId)&&(d.delivery_date||'')>reportMonth+'-31'; }).reduce(function(s,d){ return s+(d.amount_deducted||0);},0);
+  var afterTopups = reportAllTopups.filter(function(t){ return String(t.customer_id)===String(reportCustomerId)&&(t.topup_date||'')>reportMonth+'-31'; }).reduce(function(s,t){ return s+(t.amount||0);},0);
+  var openingBal = currentBal+afterDeductions-afterTopups;
+  var runBal = openingBal;
+  var totalDeducted=0,totalTopups=0,totalQty=0;
+  var tableRows='';
+  sortedDates.forEach(function(date){
+    monthTopups.filter(function(t){ return t.topup_date===date; }).forEach(function(t){
+      runBal+=(t.amount||0); totalTopups+=(t.amount||0);
+      tableRows+='<tr style="background:#f0faf5"><td>'+fmtDate(date)+'</td><td colspan="3">Top-up &middot; '+esc(t.payment_mode||'Cash')+'</td><td style="color:green;font-weight:bold">+ Rs.'+(t.amount||0).toFixed(0)+'</td><td><b>Rs.'+runBal.toFixed(0)+'</b></td></tr>';
+    });
+    monthDeliveries.filter(function(d){ return d.delivery_date===date; }).forEach(function(d){
+      var deduct=d.amount_deducted||0; runBal-=deduct; totalDeducted+=deduct; totalQty+=(d.qty_delivered||0);
+      tableRows+='<tr><td>'+fmtDate(date)+'</td><td>'+esc(d.session||'')+'</td><td>'+(d.qty_delivered||0)+'L</td><td>'+esc(d.status||'')+'</td><td style="color:red">- Rs.'+deduct.toFixed(0)+'</td><td><b>Rs.'+runBal.toFixed(0)+'</b></td></tr>';
+    });
+  });
+  var closingBal = openingBal+totalTopups-totalDeducted;
+  var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Statement</title>'
+    +'<style>body{font-family:Arial,sans-serif;font-size:12px;padding:20px;color:#111}'
+    +'h1{font-size:18px;margin:0 0 4px}h2{font-size:14px;color:#444;margin:0 0 16px}'
+    +'table{width:100%;border-collapse:collapse;margin-top:16px}'
+    +'th{background:#085041;color:#fff;padding:8px;text-align:left;font-size:11px}'
+    +'td{padding:7px 8px;border-bottom:1px solid #ddd}'
+    +'.summary{display:flex;gap:16px;margin:16px 0;flex-wrap:wrap}'
+    +'.sum-box{border:1px solid #ddd;border-radius:6px;padding:10px 14px;min-width:120px}'
+    +'.sum-label{font-size:10px;color:#666;text-transform:uppercase;margin-bottom:4px}'
+    +'.sum-val{font-size:16px;font-weight:bold}'
+    +'tfoot tr td{font-weight:bold;background:#f5f5f5}'
+    +'</style></head><body>'
+    +'<h1>GauRas Milk Distribution</h1>'
+    +'<h2>Monthly Statement &mdash; '+reportMonth+'</h2>'
+    +'<div><strong>'+esc(c.first_name||'')+' '+esc(c.last_name||'')+'</strong> &middot; '
+    +esc(c.customer_code||'')+' &middot; '+(route?esc(route.name):'')+'<br>'
+    +(c.morning_quota||0)+'L morning + '+(c.evening_quota||0)+'L evening &middot; Rate: Rs.'+rate+'/L</div>'
+    +'<div class="summary">'
+    +'<div class="sum-box"><div class="sum-label">Opening Balance</div><div class="sum-val">Rs.'+openingBal.toFixed(0)+'</div></div>'
+    +'<div class="sum-box"><div class="sum-label">Total Deducted</div><div class="sum-val" style="color:red">Rs.'+totalDeducted.toFixed(0)+'</div></div>'
+    +'<div class="sum-box"><div class="sum-label">Total Top-ups</div><div class="sum-val" style="color:green">Rs.'+totalTopups.toFixed(0)+'</div></div>'
+    +'<div class="sum-box"><div class="sum-label">Closing Balance</div><div class="sum-val" style="color:'+(closingBal>=0?'green':'red')+'">Rs.'+closingBal.toFixed(0)+'</div></div>'
+    +'<div class="sum-box"><div class="sum-label">Qty Delivered</div><div class="sum-val">'+totalQty.toFixed(1)+'L</div></div>'
+    +'</div>'
+    +'<table><thead><tr><th>Date</th><th>Session</th><th>Qty</th><th>Status</th><th>Amount</th><th>Balance</th></tr></thead>'
+    +'<tbody>'+tableRows+'</tbody>'
+    +'<tfoot><tr><td colspan="2">Total</td><td>'+totalQty.toFixed(1)+'L</td><td></td><td>Rs.'+totalDeducted.toFixed(0)+' out / Rs.'+totalTopups.toFixed(0)+' in</td><td>Rs.'+closingBal.toFixed(0)+'</td></tr></tfoot>'
+    +'</table>'
+    +'<div style="margin-top:20px;font-size:10px;color:#888">Generated on '+fmtDate(todayStr())+' &middot; GauRas Milk Distribution</div>'
+    +'</body></html>';
+  var win = window.open('','_blank');
+  win.document.write(html);
+  win.document.close();
+  win.print();
 }
 
 // ── HELPERS ──
