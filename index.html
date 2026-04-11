@@ -1019,7 +1019,53 @@ function renderRoutes() {
 }
 
 // ── MASTERS ──
+let mastersTab = 'rate';
+
 function renderMasters() {
+  buildMastersTabs();
+  if (mastersTab === 'rate') renderRateMaster();
+  else if (mastersTab === 'customer') renderCustomerMaster();
+  else if (mastersTab === 'route') renderRouteMaster();
+}
+
+function buildMastersTabs() {
+  var shell = document.getElementById('masters-shell');
+  if (!shell) {
+    document.getElementById('content').innerHTML =
+      '<div id="masters-tabs" class="tabs" style="margin-bottom:0"></div>'
+      + '<div id="masters-body" style="margin-top:0"></div>';
+  }
+  var tabEl = document.getElementById('masters-tabs');
+  if (tabEl) {
+    tabEl.innerHTML =
+      '<div class="tab'+(mastersTab==='rate'?' active':'')+'" onclick="setMastersTab(0)">Rate Master</div>'
+      + '<div class="tab'+(mastersTab==='customer'?' active':'')+'" onclick="setMastersTab(1)">Customer Master</div>'
+      + '<div class="tab'+(mastersTab==='route'?' active':'')+'" onclick="setMastersTab(2)">Route Master</div>';
+  }
+}
+
+function confirmDelCust(id) {
+  var c = customers.find(function(x){ return x.id===id; });
+  if (!c) return;
+  confirmDel('customer', id, (c.first_name||'')+' '+(c.last_name||''));
+}
+function confirmDelRoute(id) {
+  var r = routes.find(function(x){ return x.id===id; });
+  if (!r) return;
+  confirmDel('route', id, r.name||'');
+}
+
+function setMastersTab(t) {
+  mastersTab = t===0?'rate':t===1?'customer':'route';
+  renderMasters();
+}
+
+function getMastersBody() {
+  buildMastersTabs();
+  return document.getElementById('masters-body') || document.getElementById('content');
+}
+
+function renderRateMaster() {
   const cur = rates.length ? rates[0] : null;
   const histRows = rates.map((r,i) => `
     <tr class="${i===0?'cur-rate-row':''}">
@@ -1029,8 +1075,7 @@ function renderMasters() {
       <td style="color:var(--text-muted)">${esc(r.notes||'--')}</td>
       <td style="color:var(--text-hint);font-size:12px">${fmtDate(r.created_at)}</td>
     </tr>`).join('');
-  document.getElementById('content').innerHTML = `
-    <div class="tabs"><div class="tab active">Rate Master</div></div>
+  var html = `
     <div class="rate-hero">
       <div>
         <div class="rate-hero-label">Current Milk Rate</div>
@@ -1048,12 +1093,100 @@ function renderMasters() {
     <div class="card" style="margin-top:16px">
       <div class="card-header"><div class="card-title">How Rate Changes Work</div></div>
       <div class="card-body" style="font-size:13px;color:var(--text-muted);line-height:1.9">
-        <p>✅ Setting a new rate applies it to <strong>all customers</strong> from the <strong>Effective From date</strong>.</p>
-        <p>📅 Deliveries before that date use the previous rate -- past billing is never retroactively changed.</p>
-        <p>📋 All past rates are preserved here for audit trails and monthly statement generation.</p>
-        <p>🔔 Individual customer rates are not supported -- one global rate applies to everyone.</p>
+        <p>Setting a new rate applies it to all customers from the Effective From date.</p>
+        <p>Deliveries before that date use the previous rate -- past billing is never retroactively changed.</p>
+        <p>All past rates are preserved here for audit trails and monthly statement generation.</p>
       </div>
     </div>`;
+  var b = getMastersBody(); if(b) b.innerHTML = html;
+}
+
+function renderCustomerMaster() {
+  var mSrch = window._mCustSrch || '';
+  var mRoute = window._mCustRoute || '';
+  var mStatus = window._mCustStatus || '';
+
+  var list = customers.filter(function(c) {
+    var name = ((c.first_name||'')+' '+(c.last_name||'')+' '+(c.customer_code||'')).toLowerCase();
+    var ok1 = !mSrch || name.includes(mSrch.toLowerCase()) || (c.phone||'').includes(mSrch);
+    var ok2 = !mRoute || String(c.route_id)===String(mRoute);
+    var ok3 = !mStatus || c.status===mStatus;
+    return ok1 && ok2 && ok3;
+  }).sort(function(a,b){ return ((a.first_name||'')+(a.last_name||'')).localeCompare((b.first_name||'')+(b.last_name||'')); });
+
+  var routeOpts = '<option value="">All Routes</option>'
+    + routes.map(function(r){ return '<option value="'+r.id+'"'+(mRoute==r.id?' selected':'')+'>'+esc(r.name)+'</option>'; }).join('');
+
+  var rows = list.map(function(c) {
+    var rt = routes.find(function(r){ return r.id===c.route_id; });
+    var w = getWallet(c.id);
+    return '<tr>'
+      + '<td><span class="td-code">'+esc(c.customer_code||'--')+'</span></td>'
+      + '<td><div class="td-primary">'+esc(c.first_name||'')+' '+esc(c.last_name||'')+'</div><div class="td-sub">'+esc(c.phone||'')+'</div></td>'
+      + '<td>'+(rt?'<span class="badge badge-route">'+esc(rt.name)+'</span>':'--')+'</td>'
+      + '<td>'+( c.morning_quota||0)+'L + '+(c.evening_quota||0)+'L</td>'
+      + '<td style="font-weight:600;color:'+(w.balance>=0?'var(--brand)':'var(--danger)')+'">Rs.'+(w.balance||0).toFixed(0)+'</td>'
+      + '<td><span class="badge badge-'+(c.status||'Active')+'">'+(c.status||'Active')+'</span></td>'
+      + '<td><div class="acts">'
+      + '<button class="btn btn-outline btn-xs" onclick="openEditCust('+c.id+')">Edit</button>'
+      + '<button class="btn btn-danger btn-xs" onclick="confirmDelCust('+c.id+')">Delete</button>'
+      + '</div></td>'
+      + '</tr>';
+  }).join('');
+
+  var html = '<div class="card">'
+    + '<div class="card-header">'
+    + '<div class="card-title">Customer Master</div>'
+    + '<button class="btn btn-primary btn-sm" onclick="openAddCust()">+ Add Customer</button>'
+    + '</div>'
+    + '<div class="toolbar">'
+    + '<div class="search-wrap"><span class="si">🔍</span><input placeholder="Search name, code, phone..." value="'+mSrch+'" oninput="window._mCustSrch=this.value;renderCustomerMaster()"></div>'
+    + '<select class="flt" onchange="window._mCustRoute=this.value;renderCustomerMaster()">'+routeOpts+'</select>'
+    + '<select class="flt" onchange="window._mCustStatus=this.value;renderCustomerMaster()">'
+    + '<option value="">All Status</option>'
+    + '<option value="Active"'+(mStatus==='Active'?' selected':'')+'>Active</option>'
+    + '<option value="Grace"'+(mStatus==='Grace'?' selected':'')+'>Grace</option>'
+    + '<option value="Paused"'+(mStatus==='Paused'?' selected':'')+'>Paused</option>'
+    + '<option value="Stopped"'+(mStatus==='Stopped'?' selected':'')+'>Stopped</option>'
+    + '</select>'
+    + '</div>'
+    + (list.length===0
+      ? '<div class="empty"><div class="empty-icon">👥</div><p>No customers match filters.</p></div>'
+      : '<div class="tbl-wrap"><table><thead><tr><th>Code</th><th>Name</th><th>Route</th><th>Quota</th><th>Balance</th><th>Status</th><th>Actions</th></tr></thead><tbody>'+rows+'</tbody></table></div>')
+    + '<div class="pager"><div class="pager-info">'+list.length+' of '+customers.length+' customers</div></div>'
+    + '</div>';
+
+  var b = getMastersBody(); if(b) b.innerHTML = html;
+}
+
+function renderRouteMaster() {
+  var maxC = Math.max(1, Math.max.apply(null, routes.map(function(r){ return customers.filter(function(c){ return c.route_id===r.id;}).length; }).concat([1])));
+
+  var cards = routes.length===0
+    ? '<div class="empty"><div class="empty-icon">🗺️</div><p>No routes yet. Add your first route!</p></div>'
+    : '<div class="route-grid">'+routes.map(function(r) {
+        var cc = customers.filter(function(c){ return c.route_id===r.id;}).length;
+        var ll = customers.filter(function(c){ return c.route_id===r.id;}).reduce(function(s,c){ return s+(c.morning_quota||0)+(c.evening_quota||0);},0);
+        return '<div class="route-card">'
+          + '<div style="display:flex;justify-content:space-between;align-items:flex-start">'
+          + '<div><div class="rc-name">'+esc(r.name)+'</div>'
+          + '<div style="font-size:12px;color:var(--text-muted);margin-top:2px">'+esc(r.area||'')+(r.milkman?' &middot; '+esc(r.milkman):'')+'</div></div>'
+          + '<span class="badge badge-route">'+esc(r.delivery_time||'Both')+'</span>'
+          + '</div>'
+          + '<div class="rc-meta"><span>👥 '+cc+' customers</span><span>🥛 '+ll.toFixed(1)+'L/day</span></div>'
+          + '<div class="rc-bar"><div class="rc-bar-fill" style="width:'+Math.round(cc/maxC*100)+'%"></div></div>'
+          + (r.notes?'<div style="font-size:11px;color:var(--text-hint);margin-top:8px">'+esc(r.notes)+'</div>':'')
+          + '<div style="display:flex;gap:6px;margin-top:12px">'
+          + '<button class="btn btn-outline btn-sm" style="flex:1" onclick="openEditRoute('+r.id+')">Edit</button>'
+          + '<button class="btn btn-danger btn-sm" onclick="confirmDelRoute('+r.id+')">Delete</button>'
+          + '</div></div>';
+      }).join('')+'</div>';
+
+  var html = '<div style="display:flex;justify-content:flex-end;margin-bottom:12px">'
+    + '<button class="btn btn-primary" onclick="openAddRoute()">+ Add Route</button></div>'
+    + '<div class="card"><div class="card-body">'+cards+'</div></div>';
+
+  var b = getMastersBody(); if(b) b.innerHTML = html;
 }
 
 // ── CUSTOMER MODAL ──
@@ -1157,7 +1290,7 @@ async function saveCustomer() {
       }
       toast('Customer added','success');
     }
-    closeM('cust-modal'); renderCustomers();
+    closeM('cust-modal'); if(mastersTab==='customer') renderMasters(); else renderCustomers();
   } catch(e) { toast('Error: '+e.message,'error'); }
 }
 
@@ -1188,7 +1321,7 @@ async function saveRoute() {
       const res=await db.insert('gs_routes',data); routes.push(res[0]);
       toast('Route added','success');
     }
-    closeM('route-modal'); renderRoutes();
+    closeM('route-modal'); if(mastersTab==='route') renderMasters(); else renderRoutes();
   } catch(e) { toast('Error: '+e.message,'error'); }
 }
 
@@ -1207,7 +1340,7 @@ async function saveRate() {
     const res=await db.insert('gs_rates',{rate_per_litre:rate,effective_from:date,notes:v('rt-notes')||null});
     rates.unshift(res[0]);
     toast(`Rate Rs.${rate}/L saved -- effective ${fmtDate(date)}`,'success');
-    closeM('rate-modal'); renderMasters();
+    closeM('rate-modal'); mastersTab='rate'; renderMasters();
   } catch(e) { toast('Error: '+e.message,'error'); }
 }
 
@@ -1222,11 +1355,11 @@ async function doDel(type,id) {
   try {
     if(type==='customer') {
       await db.del('gs_customers',id); customers=customers.filter(c=>c.id!==id);
-      closeM('confirm-modal'); toast('Customer deleted','success'); renderCustomers();
+      closeM('confirm-modal'); toast('Customer deleted','success'); if(mastersTab==='customer') renderMasters(); else renderCustomers();
     } else {
       if(customers.some(c=>c.route_id===id)) { closeM('confirm-modal'); return toast('Route has customers -- reassign them first','error'); }
       await db.del('gs_routes',id); routes=routes.filter(r=>r.id!==id);
-      closeM('confirm-modal'); toast('Route deleted','success'); renderRoutes();
+      closeM('confirm-modal'); toast('Route deleted','success'); if(mastersTab==='route') renderMasters(); else renderRoutes();
     }
   } catch(e) { toast('Error: '+e.message,'error'); }
 }
