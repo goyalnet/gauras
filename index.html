@@ -2021,6 +2021,7 @@ function renderDelivery() {
   // Total litres this session
   var totalLitres = saved.reduce(function(s,d) { return s+(d.qty_delivered||0); }, 0);
   var totalDeducted = saved.reduce(function(s,d) { return s+(d.amount_deducted||0); }, 0);
+  var totalEmpties = saved.reduce(function(s,d) { return s+(d.empty_bottles||0); }, 0);
 
   // Build customer cards
   var cards = routeCustomers.map(function(c) {
@@ -2092,7 +2093,7 @@ function renderDelivery() {
   html += '<div class="del-hero">';
   html += '<div><div style="font-size:12px;opacity:0.7;margin-bottom:4px">'+dow+', '+todayFmt+'</div>';
   html += '<div style="font-size:18px;font-weight:700">'+esc(route?route.name:'')+'</div>';
-  html += '<div style="font-size:13px;opacity:0.75;margin-top:2px">'+done+' of '+total+' done &middot; '+totalLitres.toFixed(1)+'L delivered &middot; Rs.'+totalDeducted.toFixed(0)+' deducted</div></div>';
+  html += '<div style="font-size:13px;opacity:0.75;margin-top:2px">'+done+' of '+total+' done &middot; '+totalLitres.toFixed(1)+'L delivered &middot; Rs.'+totalDeducted.toFixed(0)+' deducted &middot; '+totalEmpties+' empties</div></div>';
   html += '<div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end">';
   html += '<div style="display:flex;gap:6px">';
   html += '<button class="del-session-btn'+(deliverySession==='Morning'?' active':'')+'" onclick="deliverySession=\'Morning\';renderDelivery()">Morning</button>';
@@ -2111,6 +2112,7 @@ function renderDelivery() {
     html += '<div class="del-summary-item"><strong>'+totalLitres.toFixed(1)+'L</strong> delivered</div>';
     html += '<div class="del-summary-item"><strong>Rs.'+totalDeducted.toFixed(0)+'</strong> deducted</div>';
     html += '<div class="del-summary-item"><strong>'+(total-done)+'</strong> remaining</div>';
+    html += '<div class="del-summary-item"><strong>'+totalEmpties+'</strong> empties collected</div>';
     html += '</div>';
   }
 
