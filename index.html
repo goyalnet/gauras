@@ -2344,17 +2344,41 @@ function seqRenderRows() {
     num.min = 1;
     num.max = seqList.length;
     num.value = i + 1;
-    num.addEventListener('keydown', function(e){
-      if (e.key === 'Enter') {
-        var newPos = parseInt(this.value) - 1;
-        if (isNaN(newPos)) return;
-        newPos = Math.max(0, Math.min(seqList.length - 1, newPos));
-        var moved = seqList.splice(i, 1)[0];
-        seqList.splice(newPos, 0, moved);
-        seqList.forEach(function(x,j){ x.delivery_sequence = j+1; });
-        seqRenderRows();
-      }
-    });
+    num.addEventListener('keydown', (function(idx){
+      return function(e){
+        if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          if (idx === 0) return;
+          var moved = seqList.splice(idx, 1)[0];
+          seqList.splice(idx - 1, 0, moved);
+          seqList.forEach(function(x,j){ x.delivery_sequence = j+1; });
+          seqRenderRows();
+          // Restore focus to same customer's input
+          var inp = document.querySelector('#sr-' + moved.id + ' input');
+          if (inp) inp.focus();
+        } else if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          if (idx === seqList.length - 1) return;
+          var moved = seqList.splice(idx, 1)[0];
+          seqList.splice(idx + 1, 0, moved);
+          seqList.forEach(function(x,j){ x.delivery_sequence = j+1; });
+          seqRenderRows();
+          var inp = document.querySelector('#sr-' + moved.id + ' input');
+          if (inp) inp.focus();
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          var newPos = parseInt(this.value) - 1;
+          if (isNaN(newPos)) return;
+          newPos = Math.max(0, Math.min(seqList.length - 1, newPos));
+          var moved = seqList.splice(idx, 1)[0];
+          seqList.splice(newPos, 0, moved);
+          seqList.forEach(function(x,j){ x.delivery_sequence = j+1; });
+          seqRenderRows();
+          var inp = document.querySelector('#sr-' + moved.id + ' input');
+          if (inp) inp.focus();
+        }
+      };
+    })(i));
 
     // Info
     var info = document.createElement('div');
