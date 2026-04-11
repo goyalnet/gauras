@@ -2579,20 +2579,43 @@ let summaryBottleLogs = [];
 let expandedRoutes = {}; // routeId -> true/false
 
 function renderReports() {
-  // Show tab selector
   var activeTab = window._reportTab || 'summary';
-  document.getElementById('content').innerHTML =
-    '<div class="tabs" style="margin-bottom:0">'
-    + '<div class="tab'+(activeTab==='summary'?' active':'')+'" onclick="setReportTab(0)">Daily Summary</div>'
-    + '<div class="tab'+(activeTab==='statement'?' active':'')+'" onclick="setReportTab(1)">Monthly Statement</div>'
-    + '</div>'
-    + '<div id="report-body" style="margin-top:0"></div>';
-  if (activeTab==='summary') loadSummaryData();
-  else loadReportData();
+  // Only build shell if not already built
+  if (!document.getElementById('report-body')) {
+    document.getElementById('content').innerHTML =
+      '<div id="report-tabs" class="tabs" style="margin-bottom:0"></div>'
+      + '<div id="report-body" style="margin-top:0"></div>';
+  }
+  // Always update tabs
+  var tabEl = document.getElementById('report-tabs');
+  if (tabEl) {
+    tabEl.innerHTML =
+      '<div class="tab'+(activeTab==='summary'?' active':'')+'" onclick="setReportTab(0)">Daily Summary</div>'
+      + '<div class="tab'+(activeTab==='statement'?' active':'')+'" onclick="setReportTab(1)">Monthly Statement</div>';
+  }
+}
+
+function showReportBody() {
+  // Ensure shell exists
+  if (!document.getElementById('report-body')) {
+    document.getElementById('content').innerHTML =
+      '<div id="report-tabs" class="tabs" style="margin-bottom:0"></div>'
+      + '<div id="report-body" style="margin-top:0"></div>';
+  }
+  var activeTab = window._reportTab || 'summary';
+  var tabEl = document.getElementById('report-tabs');
+  if (tabEl) {
+    tabEl.innerHTML =
+      '<div class="tab'+(activeTab==='summary'?' active':'')+'" onclick="setReportTab(0)">Daily Summary</div>'
+      + '<div class="tab'+(activeTab==='statement'?' active':'')+'" onclick="setReportTab(1)">Monthly Statement</div>';
+  }
+  return document.getElementById('report-body');
 }
 
 async function loadSummaryData() {
   window._reportTab = 'summary';
+  var body = showReportBody();
+  if (body) body.innerHTML = '<div style="padding:20px;color:var(--text-muted)">Loading...</div>';
   try { summaryDeliveries = await db.get('gs_deliveries','delivery_date=eq.'+summaryDate+'&order=route_id.asc'); } catch(e){ summaryDeliveries=[]; }
   try { summaryTopups = await db.get('gs_topups','topup_date=eq.'+summaryDate); } catch(e){ summaryTopups=[]; }
   try { summaryBottleLogs = await db.get('gs_bottle_log','log_date=eq.'+summaryDate); } catch(e){ summaryBottleLogs=[]; }
@@ -2601,6 +2624,7 @@ async function loadSummaryData() {
 
 function setReportTab(tab) {
   window._reportTab = (tab===0||tab==='summary') ? 'summary' : 'statement';
+  renderReports();
   if (window._reportTab === 'summary') loadSummaryData();
   else loadReportData();
 }
@@ -2738,7 +2762,7 @@ function renderDailySummary() {
     html += '</tbody></table></div></div>';
   }
 
-  document.getElementById('report-body').innerHTML = html;
+  var rb = showReportBody(); if(rb) rb.innerHTML = html;
 }
 
 function statBox(label, val, color, sub) {
@@ -2873,18 +2897,27 @@ function exportSummaryPDF() {
 function renderMonthlyStatement() {
   var targetEl = document.getElementById('report-body') || document.getElementById('content');
   var today = todayStr();
+  var reportRouteFilter = window._reportRouteFilter || '';
+  var routeFilterOpts = '<option value="">All Routes</option>'
+    + routes.map(function(r){ return '<option value="'+r.id+'"'+(reportRouteFilter==r.id?' selected':'')+'>'+esc(r.name)+'</option>'; }).join('');
+  var filteredCusts = reportRouteFilter
+    ? customers.filter(function(c){ return String(c.route_id)===String(reportRouteFilter); })
+    : customers;
   var custOpts = '<option value="">-- Select Customer --</option>'
-    + customers.slice().sort(function(a,b){ return ((a.first_name||'')+(a.last_name||'')).localeCompare((b.first_name||'')+(b.last_name||'')); })
+    + filteredCusts.slice().sort(function(a,b){ return ((a.first_name||'')+(a.last_name||'')).localeCompare((b.first_name||'')+(b.last_name||'')); })
       .map(function(c){ return '<option value="'+c.id+'"'+(reportCustomerId==c.id?' selected':'')+'>'+esc(c.first_name||'')+' '+esc(c.last_name||'')+' ('+esc(c.customer_code||'')+')</option>'; }).join('');
 
   var html = '<div class="card" style="margin-bottom:16px">';
   html += '<div class="card-header"><div class="card-title">Monthly Statement</div></div>';
   html += '<div style="padding:16px;display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">';
   html += '<div><label class="flabel" style="display:block;margin-bottom:5px">Month</label>';
-  html += '<input type="month" value="'+reportMonth+'" style="padding:8px 11px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:inherit;outline:none" onchange="reportMonth=this.value;loadReportData()">';
+  html += '<input type="month" value="'+reportMonth+'" style="padding:8px 11px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:inherit;outline:none" onchange="reportMonth=this.value;loadReportData()" onclick="event.stopPropagation()">';
+  html += '</div>';
+  html += '<div><label class="flabel" style="display:block;margin-bottom:5px">Route</label>';
+  html += '<select style="padding:8px 11px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:inherit;outline:none;background:var(--surface);min-width:160px" onchange="window._reportRouteFilter=this.value;reportCustomerId=null;renderMonthlyStatement()">'+routeFilterOpts+'</select>';
   html += '</div>';
   html += '<div style="flex:1;min-width:220px"><label class="flabel" style="display:block;margin-bottom:5px">Customer</label>';
-  html += '<select style="width:100%;padding:8px 11px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:inherit;outline:none;background:var(--surface)" onchange="reportCustomerId=parseInt(this.value)||null;renderMonthlyStatement()">'+custOpts+'</select>';
+  html += '<select style="width:100%;padding:8px 11px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:inherit;outline:none;background:var(--surface)" onchange="reportCustomerId=parseInt(this.value)||null;renderMonthlyStatement()" onclick="event.stopPropagation()">'+custOpts+'</select>';
   html += '</div>';
   html += '</div></div>';
 
@@ -3008,12 +3041,13 @@ function renderMonthlyStatement() {
   html += '</tr></tfoot>';
   html += '</table></div></div>';
 
-  targetEl.innerHTML = html;
+  var rb2 = showReportBody(); if(rb2) rb2.innerHTML = html;
 }
 
 async function loadReportData() {
   window._reportTab = 'statement';
-  renderReports(); // build tabs shell first
+  var body = showReportBody();
+  if (body) body.innerHTML = '<div style="padding:20px;color:var(--text-muted)">Loading...</div>';
   try {
     reportAllDeliveries = await db.get('gs_deliveries', 'delivery_date=gte.'+reportMonth+'-01&delivery_date=lte.'+reportMonth+'-31&order=delivery_date.asc');
   } catch(e) { reportAllDeliveries = []; }
