@@ -646,7 +646,7 @@ function go(page) {
   else if (page === 'masters') renderMasters();
   else if (page === 'wallet') renderWallet();
   else if (page === 'delivery') renderDelivery();
-  else if (page === 'reports') { window._reportTab='summary'; renderReports(); }
+  else if (page === 'reports') { if(!window._reportTab) window._reportTab='summary'; renderReports(); if(window._reportTab==='summary') loadSummaryData(); else if(window._reportTab==='route') renderRouteStatement(); else loadReportData(); }
   else document.getElementById('content').innerHTML = '<div class="empty"><div class="empty-icon">🚧</div><p>Coming in a future phase.</p></div>';
 }
 
@@ -2580,35 +2580,32 @@ let expandedRoutes = {}; // routeId -> true/false
 
 function renderReports() {
   var activeTab = window._reportTab || 'summary';
-  // Only build shell if not already built
   if (!document.getElementById('report-body')) {
     document.getElementById('content').innerHTML =
       '<div id="report-tabs" class="tabs" style="margin-bottom:0"></div>'
       + '<div id="report-body" style="margin-top:0"></div>';
   }
-  // Always update tabs
-  var tabEl = document.getElementById('report-tabs');
-  if (tabEl) {
-    tabEl.innerHTML =
-      '<div class="tab'+(activeTab==='summary'?' active':'')+'" onclick="setReportTab(0)">Daily Summary</div>'
-      + '<div class="tab'+(activeTab==='statement'?' active':'')+'" onclick="setReportTab(1)">Monthly Statement</div>';
-  }
+  buildReportTabs();
 }
 
-function showReportBody() {
-  // Ensure shell exists
-  if (!document.getElementById('report-body')) {
-    document.getElementById('content').innerHTML =
-      '<div id="report-tabs" class="tabs" style="margin-bottom:0"></div>'
-      + '<div id="report-body" style="margin-top:0"></div>';
-  }
+function buildReportTabs() {
   var activeTab = window._reportTab || 'summary';
   var tabEl = document.getElementById('report-tabs');
   if (tabEl) {
     tabEl.innerHTML =
       '<div class="tab'+(activeTab==='summary'?' active':'')+'" onclick="setReportTab(0)">Daily Summary</div>'
-      + '<div class="tab'+(activeTab==='statement'?' active':'')+'" onclick="setReportTab(1)">Monthly Statement</div>';
+      + '<div class="tab'+(activeTab==='route'?' active':'')+'" onclick="setReportTab(1)">Route Statement</div>'
+      + '<div class="tab'+(activeTab==='customer'?' active':'')+'" onclick="setReportTab(2)">Customer Statement</div>';
   }
+}
+
+function showReportBody() {
+  if (!document.getElementById('report-body')) {
+    document.getElementById('content').innerHTML =
+      '<div id="report-tabs" class="tabs" style="margin-bottom:0"></div>'
+      + '<div id="report-body" style="margin-top:0"></div>';
+  }
+  buildReportTabs();
   return document.getElementById('report-body');
 }
 
@@ -2623,9 +2620,12 @@ async function loadSummaryData() {
 }
 
 function setReportTab(tab) {
-  window._reportTab = (tab===0||tab==='summary') ? 'summary' : 'statement';
+  if (tab===0||tab==='summary') window._reportTab = 'summary';
+  else if (tab===1||tab==='route') window._reportTab = 'route';
+  else window._reportTab = 'customer';
   renderReports();
   if (window._reportTab === 'summary') loadSummaryData();
+  else if (window._reportTab === 'route') renderRouteStatement();
   else loadReportData();
 }
 
@@ -2894,27 +2894,168 @@ function exportSummaryPDF() {
   var win=window.open('','_blank'); win.document.write(html); win.document.close(); win.print();
 }
 
+// ── ROUTE STATEMENT ──
+let stmtRouteId = null;
+let stmtRouteMonth = new Date().toISOString().slice(0,7);
+
+function renderRouteStatement() {
+  window._reportTab = 'route';
+  var body = showReportBody();
+  if (!body) return;
+
+  var routeOpts = '<option value="">-- Select Route --</option>'
+    + routes.map(function(r){ return '<option value="'+r.id+'"'+(stmtRouteId==r.id?' selected':'')+'>'+esc(r.name)+'</option>'; }).join('');
+
+  var html = '<div class="card" style="margin-bottom:16px">'
+    + '<div class="card-header"><div class="card-title">Route Statement</div></div>'
+    + '<div style="padding:16px;display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">'
+    + '<div><label class="flabel" style="display:block;margin-bottom:5px">Month</label>'
+    + '<input type="month" value="'+stmtRouteMonth+'" style="padding:8px 11px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:inherit;outline:none" onchange="stmtRouteMonth=this.value;renderRouteStatement()">'
+    + '</div>'
+    + '<div style="flex:1;min-width:200px"><label class="flabel" style="display:block;margin-bottom:5px">Route</label>'
+    + '<select style="width:100%;padding:8px 11px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:inherit;outline:none;background:var(--surface)" onchange="stmtRouteId=parseInt(this.value)||null;renderRouteStatement()">'+routeOpts+'</select>'
+    + '</div></div></div>';
+
+  if (!stmtRouteId) {
+    html += '<div class="empty"><div class="empty-icon">🗺️</div><p>Select a route and month to view the statement.</p></div>';
+    body.innerHTML = html;
+    return;
+  }
+
+  var route = routes.find(function(r){ return r.id===stmtRouteId; });
+  var routeCustomers = customers.filter(function(c){ return String(c.route_id)===String(stmtRouteId); })
+    .sort(function(a,b){ return (a.delivery_sequence||999)-(b.delivery_sequence||999); });
+
+  // Load data for route customers for this month
+  var mDeliveries = reportAllDeliveries.filter(function(d){
+    return routeCustomers.some(function(c){ return c.id===d.customer_id; }) && (d.delivery_date||'').startsWith(stmtRouteMonth);
+  });
+  var mTopups = reportAllTopups.filter(function(t){
+    return routeCustomers.some(function(c){ return c.id===t.customer_id; }) && (t.topup_date||'').startsWith(stmtRouteMonth);
+  });
+
+  if (reportAllDeliveries.length === 0 || !reportAllDeliveries[0] || !(reportAllDeliveries[0].delivery_date||'').startsWith(stmtRouteMonth)) {
+    // Need to load data for this month
+    body.innerHTML = html + '<div style="padding:20px;color:var(--text-muted)">Loading data...</div>';
+    loadRouteReportData();
+    return;
+  }
+
+  // Summary per customer
+  var totLitres=0, totAmt=0, totTopups=0;
+  var custRows = '';
+  routeCustomers.forEach(function(c) {
+    var cDel = mDeliveries.filter(function(d){ return d.customer_id===c.id; });
+    var cTop = mTopups.filter(function(t){ return String(t.customer_id)===String(c.id); });
+    var cLitres = cDel.reduce(function(s,d){ return s+(d.qty_delivered||0);},0);
+    var cAmt = cDel.reduce(function(s,d){ return s+(d.amount_deducted||0);},0);
+    var cTop$ = cTop.reduce(function(s,t){ return s+(t.amount||0);},0);
+    var w = getWallet(c.id);
+    totLitres+=cLitres; totAmt+=cAmt; totTopups+=cTop$;
+    custRows += '<tr>'
+      + '<td><div class="td-primary">'+esc(c.first_name||'')+' '+esc(c.last_name||'')+'</div><div class="td-sub">'+esc(c.customer_code||'')+'</div></td>'
+      + '<td>'+(c.morning_quota||0)+'L+'+(c.evening_quota||0)+'L</td>'
+      + '<td>'+cLitres.toFixed(1)+'L</td>'
+      + '<td style="color:var(--danger)">Rs.'+cAmt.toFixed(0)+'</td>'
+      + '<td style="color:var(--brand)">Rs.'+cTop$.toFixed(0)+'</td>'
+      + '<td style="font-weight:600;color:'+(w.balance>=0?'var(--brand)':'var(--danger)')+'">Rs.'+(w.balance||0).toFixed(0)+'</td>'
+      + '<td><button class="btn btn-outline btn-xs" onclick="reportCustomerId='+c.id+';reportMonth=stmtRouteMonth;setReportTab(2)">Details</button></td>'
+      + '</tr>';
+  });
+
+  html += '<div class="card">';
+  html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0;border-bottom:1px solid var(--border)">';
+  html += '<div style="padding:14px 16px;border-right:1px solid var(--border)"><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px">Total Delivered</div><div style="font-size:18px;font-weight:700;color:var(--brand)">'+totLitres.toFixed(1)+'L</div></div>';
+  html += '<div style="padding:14px 16px;border-right:1px solid var(--border)"><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px">Total Deducted</div><div style="font-size:18px;font-weight:700;color:var(--danger)">Rs.'+totAmt.toFixed(0)+'</div></div>';
+  html += '<div style="padding:14px 16px"><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px">Total Top-ups</div><div style="font-size:18px;font-weight:700;color:var(--brand-mid)">Rs.'+totTopups.toFixed(0)+'</div></div>';
+  html += '</div>';
+  html += '<div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px">';
+  html += '<button class="btn btn-outline btn-sm" onclick="exportRouteStatCSV()">Export CSV</button>';
+  html += '<button class="btn btn-primary btn-sm" onclick="exportRouteStatPDF()">Export PDF</button>';
+  html += '</div>';
+  html += '<div class="tbl-wrap"><table><thead><tr><th>Customer</th><th>Quota</th><th>Delivered</th><th>Deducted</th><th>Top-ups</th><th>Balance</th><th></th></tr></thead><tbody>'+custRows+'</tbody></table></div>';
+  html += '</div>';
+  body.innerHTML = html;
+}
+
+async function loadRouteReportData() {
+  try { reportAllDeliveries = await db.get('gs_deliveries','delivery_date=gte.'+stmtRouteMonth+'-01&delivery_date=lte.'+stmtRouteMonth+'-31&order=delivery_date.asc'); } catch(e){ reportAllDeliveries=[]; }
+  try { reportAllTopups = await db.get('gs_topups','topup_date=gte.'+stmtRouteMonth+'-01&topup_date=lte.'+stmtRouteMonth+'-31&order=topup_date.asc'); } catch(e){ reportAllTopups=[]; }
+  renderRouteStatement();
+}
+
+function exportRouteStatCSV() {
+  var route = routes.find(function(r){ return r.id===stmtRouteId; });
+  if (!route) return;
+  var routeCustomers = customers.filter(function(c){ return String(c.route_id)===String(stmtRouteId); });
+  var hdr = ['Customer','Code','Quota','Delivered(L)','Deducted(Rs)','Topups(Rs)','Balance(Rs)'];
+  var rows = [hdr];
+  routeCustomers.forEach(function(c){
+    var cDel = reportAllDeliveries.filter(function(d){ return d.customer_id===c.id && (d.delivery_date||'').startsWith(stmtRouteMonth); });
+    var cTop = reportAllTopups.filter(function(t){ return String(t.customer_id)===String(c.id) && (t.topup_date||'').startsWith(stmtRouteMonth); });
+    var w = getWallet(c.id);
+    rows.push([c.first_name+' '+c.last_name, c.customer_code||'', (c.morning_quota||0)+'+'+(c.evening_quota||0),
+      cDel.reduce(function(s,d){ return s+(d.qty_delivered||0);},0).toFixed(1),
+      cDel.reduce(function(s,d){ return s+(d.amount_deducted||0);},0).toFixed(0),
+      cTop.reduce(function(s,t){ return s+(t.amount||0);},0).toFixed(0),
+      (w.balance||0).toFixed(0)]);
+  });
+  var lines = rows.map(function(r){ return r.map(function(x){ return '"'+String(x||'').replace(/"/g,'""')+'"';}).join(',');});
+  var blob = new Blob([lines.join(String.fromCharCode(13,10))],{type:'text/csv'});
+  var a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='route-stmt-'+stmtRouteMonth+'.csv'; a.click();
+}
+
+function exportRouteStatPDF() {
+  var route = routes.find(function(r){ return r.id===stmtRouteId; });
+  if (!route) return;
+  var routeCustomers = customers.filter(function(c){ return String(c.route_id)===String(stmtRouteId); });
+  var rows='';
+  var tL=0,tA=0,tT=0;
+  routeCustomers.forEach(function(c){
+    var cDel=reportAllDeliveries.filter(function(d){ return d.customer_id===c.id&&(d.delivery_date||'').startsWith(stmtRouteMonth);});
+    var cTop=reportAllTopups.filter(function(t){ return String(t.customer_id)===String(c.id)&&(t.topup_date||'').startsWith(stmtRouteMonth);});
+    var w=getWallet(c.id);
+    var cL=cDel.reduce(function(s,d){ return s+(d.qty_delivered||0);},0);
+    var cA=cDel.reduce(function(s,d){ return s+(d.amount_deducted||0);},0);
+    var cT=cTop.reduce(function(s,t){ return s+(t.amount||0);},0);
+    tL+=cL; tA+=cA; tT+=cT;
+    rows+='<tr><td>'+esc(c.first_name+' '+c.last_name)+'<br><small>'+esc(c.customer_code||'')+'</small></td>'
+      +'<td>'+(c.morning_quota||0)+'+'+(c.evening_quota||0)+'L</td>'
+      +'<td>'+cL.toFixed(1)+'L</td>'
+      +'<td style="color:red">Rs.'+cA.toFixed(0)+'</td>'
+      +'<td style="color:green">Rs.'+cT.toFixed(0)+'</td>'
+      +'<td style="font-weight:bold;color:'+(w.balance>=0?'green':'red')+'">Rs.'+(w.balance||0).toFixed(0)+'</td></tr>';
+  });
+  var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Route Statement</title>'
+    +'<style>body{font-family:Arial,sans-serif;font-size:12px;padding:20px}h1{font-size:16px}'
+    +'table{width:100%;border-collapse:collapse;margin-top:12px}th{background:#085041;color:#fff;padding:7px;text-align:left;font-size:11px}'
+    +'td{padding:6px 8px;border-bottom:1px solid #ddd}tfoot td{font-weight:bold;background:#f5f5f5}</style></head><body>'
+    +'<h1>Route Statement: '+esc(route.name)+'</h1>'
+    +'<div style="color:#444;margin-bottom:12px">Month: '+stmtRouteMonth+(route.milkman?' &middot; Milkman: '+esc(route.milkman):'')+'</div>'
+    +'<table><thead><tr><th>Customer</th><th>Quota</th><th>Delivered</th><th>Deducted</th><th>Top-ups</th><th>Balance</th></tr></thead>'
+    +'<tbody>'+rows+'</tbody>'
+    +'<tfoot><tr><td>TOTAL</td><td></td><td>'+tL.toFixed(1)+'L</td><td style="color:red">Rs.'+tA.toFixed(0)+'</td><td style="color:green">Rs.'+tT.toFixed(0)+'</td><td></td></tr></tfoot>'
+    +'</table>'
+    +'<p style="margin-top:16px;font-size:10px;color:#888">Generated on '+fmtDate(todayStr())+' &middot; GauRas Milk Distribution</p>'
+    +'</body></html>';
+  var win=window.open('','_blank'); win.document.write(html); win.document.close(); win.print();
+}
+
 function renderMonthlyStatement() {
   var targetEl = document.getElementById('report-body') || document.getElementById('content');
   var today = todayStr();
-  var reportRouteFilter = window._reportRouteFilter || '';
-  var routeFilterOpts = '<option value="">All Routes</option>'
-    + routes.map(function(r){ return '<option value="'+r.id+'"'+(reportRouteFilter==r.id?' selected':'')+'>'+esc(r.name)+'</option>'; }).join('');
-  var filteredCusts = reportRouteFilter
-    ? customers.filter(function(c){ return String(c.route_id)===String(reportRouteFilter); })
-    : customers;
   var custOpts = '<option value="">-- Select Customer --</option>'
-    + filteredCusts.slice().sort(function(a,b){ return ((a.first_name||'')+(a.last_name||'')).localeCompare((b.first_name||'')+(b.last_name||'')); })
-      .map(function(c){ return '<option value="'+c.id+'"'+(reportCustomerId==c.id?' selected':'')+'>'+esc(c.first_name||'')+' '+esc(c.last_name||'')+' ('+esc(c.customer_code||'')+')</option>'; }).join('');
+    + customers.slice().sort(function(a,b){ return ((a.first_name||'')+(a.last_name||'')).localeCompare((b.first_name||'')+(b.last_name||'')); })
+      .map(function(c){
+        var r = routes.find(function(x){ return x.id===c.route_id; });
+        return '<option value="'+c.id+'"'+(reportCustomerId==c.id?' selected':'')+'>'+esc(c.first_name||'')+' '+esc(c.last_name||'')+' ('+esc(c.customer_code||'')+')' + (r?' - '+esc(r.name):'') + '</option>';
+      }).join('');
 
   var html = '<div class="card" style="margin-bottom:16px">';
-  html += '<div class="card-header"><div class="card-title">Monthly Statement</div></div>';
+  html += '<div class="card-header"><div class="card-title">Customer Statement</div></div>';
   html += '<div style="padding:16px;display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">';
   html += '<div><label class="flabel" style="display:block;margin-bottom:5px">Month</label>';
   html += '<input type="month" value="'+reportMonth+'" style="padding:8px 11px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:inherit;outline:none" onchange="reportMonth=this.value;loadReportData()" onclick="event.stopPropagation()">';
-  html += '</div>';
-  html += '<div><label class="flabel" style="display:block;margin-bottom:5px">Route</label>';
-  html += '<select style="padding:8px 11px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:inherit;outline:none;background:var(--surface);min-width:160px" onchange="window._reportRouteFilter=this.value;reportCustomerId=null;renderMonthlyStatement()">'+routeFilterOpts+'</select>';
   html += '</div>';
   html += '<div style="flex:1;min-width:220px"><label class="flabel" style="display:block;margin-bottom:5px">Customer</label>';
   html += '<select style="width:100%;padding:8px 11px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:inherit;outline:none;background:var(--surface)" onchange="reportCustomerId=parseInt(this.value)||null;renderMonthlyStatement()" onclick="event.stopPropagation()">'+custOpts+'</select>';
