@@ -589,6 +589,28 @@
   </div>
 </div>
 
+<!-- BOTTLE LOG EDIT MODAL -->
+<div class="backdrop" id="bottle-edit-modal">
+  <div class="modal modal-sm">
+    <div class="mhead">
+      <div class="mtitle">Edit Bottle Log</div>
+      <button class="mclose" onclick="closeM('bottle-edit-modal')">×</button>
+    </div>
+    <div class="mbody">
+      <div class="form-1">
+        <div class="fg"><label class="flabel">Filled Bottles Taken Out</label><input class="fcontrol" id="be-out" type="number" min="0" step="1"></div>
+        <div class="fg"><label class="flabel">Filled Bottles Returned</label><input class="fcontrol" id="be-ret" type="number" min="0" step="1"></div>
+        <div class="fg"><label class="flabel">Empty Bottles Collected</label><input class="fcontrol" id="be-emp" type="number" min="0" step="1"></div>
+        <div class="fg"><label class="flabel">Notes</label><input class="fcontrol" id="be-notes" placeholder="Optional"></div>
+      </div>
+    </div>
+    <div class="mfooter">
+      <button class="btn btn-outline" onclick="closeM('bottle-edit-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveBottleEdit()">Save Changes</button>
+    </div>
+  </div>
+</div>
+
 <!-- CONFIRM -->
 <div class="backdrop" id="confirm-modal">
   <div class="confirm-box">
@@ -632,6 +654,12 @@ const DAY_NAMES = ['Su','Mo','Tu','We','Th','Fr','Sa'];
 const DAY_FULL  = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 
 async function boot() {
+  document.getElementById('content').innerHTML =
+    '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:60vh;gap:16px;color:var(--text-muted)">'
+    +'<div style="font-size:32px">🥛</div>'
+    +'<div style="font-size:15px;font-weight:600">Loading GauRas...</div>'
+    +'<div style="font-size:13px">Connecting to database</div>'
+    +'</div>';
   try { routes    = await db.get('gs_routes',    'order=name.asc'); } catch(e) { routes = []; }
   try { customers = await db.get('gs_customers', 'order=last_name.asc,first_name.asc'); } catch(e) { customers = []; }
   try { rates     = await db.get('gs_rates',     'order=effective_from.desc'); } catch(e) { rates = []; }
@@ -2194,6 +2222,7 @@ function openTopup(custId) {
   document.getElementById('tp-by').value = '';
   document.getElementById('tp-notes').value = '';
   openM('topup-modal');
+  setTimeout(function(){ var el=document.getElementById('tp-amount'); if(el) el.focus(); }, 150);
 }
 
 async function saveTopup() {
@@ -2338,7 +2367,7 @@ function renderDelivery() {
       + '<div style="font-size:18px;font-weight:700;margin-bottom:8px">Daily Delivery</div>'
       + '<div style="font-size:13px;color:var(--text-muted);margin-bottom:24px">'+dow+', '+todayFmt+'</div>'
       + '<div style="font-size:13px;color:var(--text-muted);margin-bottom:12px">Select your route to begin</div>'
-      + '<select class="del-route-select" onchange="deliveryRoute=this.value;renderDelivery()">'+routeOpts+'</select>'
+      + '<select class="del-route-select" onchange="deliveryRoute=this.value;deliverySearch=\'\';renderDelivery()">'+routeOpts+'</select>'
       + '</div>';
     return;
   }
@@ -2491,7 +2520,7 @@ function renderDelivery() {
   html += '<button class="del-session-btn'+(deliverySession==='Evening'?' active':'')+'" onclick="deliverySession=\'Evening\';renderDelivery()">Evening</button>';
   // Note: deliverySearch persists across session toggles intentionally
   html += '</div>';
-  html += '<select class="del-route-select" style="font-size:13px;padding:7px 12px;color:var(--text);background:#fff;border:1.5px solid var(--border);border-radius:8px;min-width:180px" onchange="deliveryRoute=this.value;renderDelivery()">'+routeOpts+'</select>';
+  html += '<select class="del-route-select" style="font-size:13px;padding:7px 12px;color:var(--text);background:#fff;border:1.5px solid var(--border);border-radius:8px;min-width:180px" onchange="deliveryRoute=this.value;deliverySearch=\'\';renderDelivery()">'+routeOpts+'</select>';
   html += '<div style="display:flex;align-items:center;gap:6px;margin-top:4px">';
   html += '<input placeholder="Search customer..." value="'+deliverySearch+'" oninput="deliverySearch=this.value;renderDelivery()" style="padding:6px 10px;border-radius:7px;border:1px solid var(--border);font-size:12px;font-family:inherit;background:#fff;outline:none;width:160px">';
   html += '<input type="date" value="'+today+'" max="'+todayStr()+'" onchange="changeDeliveryDate(this.value)" style="padding:6px 10px;border-radius:7px;border:1px solid var(--border);font-size:12px;font-family:inherit;color:var(--text);background:#fff;outline:none">';
@@ -2966,21 +2995,34 @@ async function saveBottleLog() {
   } catch(e) { toast('Error: '+e.message, 'error'); }
 }
 
-async function editBottleLog(logId) {
+let _editingBottleLogId = null;
+
+function editBottleLog(logId) {
   var log = bottleLogs.find(function(b){ return b.id===logId; });
   if (!log) return;
-  var out = prompt('Filled bottles taken out:', log.filled_out);
-  if (out === null) return;
-  var ret = prompt('Filled bottles returned:', log.filled_returned);
-  if (ret === null) return;
-  var emp = prompt('Empty bottles collected:', log.empty_collected);
-  if (emp === null) return;
+  _editingBottleLogId = logId;
+  document.getElementById('be-out').value = log.filled_out || 0;
+  document.getElementById('be-ret').value = log.filled_returned || 0;
+  document.getElementById('be-emp').value = log.empty_collected || 0;
+  document.getElementById('be-notes').value = log.notes || '';
+  openM('bottle-edit-modal');
+  setTimeout(function(){ var el=document.getElementById('be-out'); if(el) el.focus(); }, 150);
+}
+
+async function saveBottleEdit() {
+  if (!_editingBottleLogId) return;
+  var data = {
+    filled_out: parseInt(document.getElementById('be-out').value)||0,
+    filled_returned: parseInt(document.getElementById('be-ret').value)||0,
+    empty_collected: parseInt(document.getElementById('be-emp').value)||0,
+    notes: document.getElementById('be-notes').value || null
+  };
   try {
-    var data = { filled_out: parseInt(out)||0, filled_returned: parseInt(ret)||0, empty_collected: parseInt(emp)||0 };
-    await db.update('gs_bottle_log', logId, data);
-    var i = bottleLogs.findIndex(function(b){ return b.id===logId; });
+    await db.update('gs_bottle_log', _editingBottleLogId, data);
+    var i = bottleLogs.findIndex(function(b){ return b.id===_editingBottleLogId; });
     if (i!==-1) bottleLogs[i] = Object.assign({}, bottleLogs[i], data);
     toast('Bottle log updated', 'success');
+    closeM('bottle-edit-modal');
     renderDelivery();
   } catch(e) { toast('Error: '+e.message, 'error'); }
 }
@@ -3897,7 +3939,7 @@ async function renderDashboard() {
     html += '<div style="padding:20px;text-align:center;color:var(--text-hint);font-size:13px">All customers have healthy balance</div>';
   } else {
     html += '<div style="max-height:300px;overflow-y:auto">';
-    lowBal.slice(0,10).forEach(function(c){
+    lowBal.forEach(function(c){
       var w=getWallet(c.id); var d=daysRemaining(c.id);
       var wa = c.whatsapp||c.phone||'';
       html += '<div style="padding:10px 16px;border-bottom:1px solid #eef2f0;display:flex;align-items:center;gap:10px">';
@@ -4308,18 +4350,21 @@ function printRouteList() {
     .filter(function(c){ return String(c.route_id)===String(deliveryRoute) && c.status!=='Stopped' && !isOnPause(c,today) && isDeliveryDay(c,today); })
     .sort(function(a,b){ return (a.delivery_sequence||999)-(b.delivery_sequence||999); });
 
-  var rows = routeCusts.map(function(c, i) {
+  // Filter by current session
+  var sessionCusts = routeCusts.filter(function(c){
+    if (deliverySession==='Morning') return (c.morning_quota||0) > 0;
+    if (deliverySession==='Evening') return (c.evening_quota||0) > 0;
+    return true;
+  });
+  var rows = sessionCusts.map(function(c, i) {
     var ov = getEffectiveQty(c.id, today);
-    var mq = ov ? ov.morning : (c.morning_quota||0);
-    var eq = ov ? ov.evening : (c.evening_quota||0);
-    var w = getWallet(c.id);
+    var sessionQty = deliverySession==='Morning' ? (ov?ov.morning:(c.morning_quota||0)) : (ov?ov.evening:(c.evening_quota||0));
     var addr = [c.flat_no, c.building_name, c.street].filter(Boolean).join(', ');
     return '<tr>'
       +'<td style="text-align:center;color:#666">'+(i+1)+'</td>'
       +'<td><strong>'+esc(c.first_name||'')+' '+esc(c.last_name||'')+'</strong><br><small style="color:#888">'+esc(c.customer_code||'')+'</small></td>'
       +'<td style="font-size:11px;color:#666">'+esc(addr)+'</td>'
-      +'<td style="text-align:center">'+mq+'L</td>'
-      +'<td style="text-align:center">'+eq+'L</td>'
+      +'<td style="text-align:center;font-weight:700">'+sessionQty+'L</td>'
       +'<td style="font-size:11px;color:#888">'+esc(c.delivery_notes||'')+'</td>'
       +'<td style="width:80px;border:1px solid #ccc">&nbsp;</td>'
       +'<td style="width:80px;border:1px solid #ccc">&nbsp;</td>'
@@ -4340,11 +4385,10 @@ function printRouteList() {
     +'@media print{body{padding:0}}</style></head><body>'
     +'<h1>🥛 '+esc(route?route.name:'Route')+' — Delivery List</h1>'
     +'<h2>'+dow+', '+fmtDate(today)+(route&&route.milkman?' &middot; Milkman: '+esc(route.milkman):'')+'</h2>'
-    +'<table><thead><tr><th>#</th><th>Customer</th><th>Address</th><th>Morning</th><th>Evening</th><th>Notes</th><th>Delivered</th><th>Empties</th></tr></thead>'
-    +'<tbody>'+rows+(pausedRows?'<tr><td colspan="8" style="background:#f5f5f5;font-size:11px;color:#888;font-weight:700;padding:6px 8px">PAUSED CUSTOMERS (not delivering)</td></tr>'+pausedRows:'')+'</tbody>'
-    +'<tfoot><tr style="background:#f0faf5"><td colspan="3" style="font-weight:700;padding:8px">Total: '+routeCusts.length+' customers</td>'
-    +'<td style="font-weight:700">'+routeCusts.reduce(function(s,c){ var ov=getEffectiveQty(c.id,today); return s+(ov?ov.morning:(c.morning_quota||0));},0)+'L</td>'
-    +'<td style="font-weight:700">'+routeCusts.reduce(function(s,c){ var ov=getEffectiveQty(c.id,today); return s+(ov?ov.evening:(c.evening_quota||0));},0)+'L</td>'
+    +'<table><thead><tr><th>#</th><th>Customer</th><th>Address</th><th>Qty ('+deliverySession+')</th><th>Notes</th><th>Delivered</th><th>Empties</th></tr></thead>'
+    +'<tbody>'+rows+(pausedRows?'<tr><td colspan="7" style="background:#f5f5f5;font-size:11px;color:#888;font-weight:700;padding:6px 8px">PAUSED CUSTOMERS (not delivering)</td></tr>'+pausedRows:'')+'</tbody>'
+    +'<tfoot><tr style="background:#f0faf5"><td colspan="3" style="font-weight:700;padding:8px">Total: '+sessionCusts.length+' customers</td>'
+    +'<td style="font-weight:700">'+sessionCusts.reduce(function(s,c){ var ov=getEffectiveQty(c.id,today); return s+(deliverySession==='Morning'?(ov?ov.morning:(c.morning_quota||0)):(ov?ov.evening:(c.evening_quota||0)));},0)+'L</td>'
     +'<td colspan="3"></td></tr></tfoot>'
     +'</table>'
     +'<div class="footer"><span>GauRas Milk Distribution</span><span>Generated: '+fmtDate(today)+'</span></div>'
