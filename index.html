@@ -673,6 +673,8 @@ function go(page) {
   else if (page === 'masters') renderMasters();
   else if (page === 'wallet') renderWallet();
   else if (page === 'delivery') renderDelivery();
+  else if (page === 'alerts') renderAlerts();
+  else if (page === 'bottles') renderBottleTracking();
   else if (page === 'reports') { if(!window._reportTab) window._reportTab='summary'; renderReports(); if(window._reportTab==='summary') loadSummaryData(); else if(window._reportTab==='route') renderRouteStatement(); else loadReportData(); }
   else if (page === 'dashboard') { renderDashboard(); }
   else document.getElementById('content').innerHTML = '<div class="empty"><div class="empty-icon">🚧</div><p>Coming in a future phase.</p></div>';
@@ -3749,12 +3751,330 @@ async function renderDashboard() {
   document.getElementById('content').innerHTML = html;
 }
 
+function openMissedDelivery(routeId) {
+  deliveryRoute = routeId;
+  go('delivery');
+}
+
 function dashStat(label, val, color, sub) {
   return '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px">'
     +'<div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">'+label+'</div>'
     +'<div style="font-size:22px;font-weight:700;color:'+color+'">'+val+'</div>'
     +(sub?'<div style="font-size:10px;color:var(--text-hint);margin-top:2px">'+sub+'</div>':'')
     +'</div>';
+}
+
+// ══════════════════════════════════════
+// ALERTS PAGE
+// ══════════════════════════════════════
+async function renderAlerts() {
+  var today = todayStr();
+  var tomorrow = offsetDate(today, 1);
+  var rate = getRateForDate(today);
+
+  // Load today's deliveries for missed delivery check
+  var todayDel = [];
+  try { todayDel = await db.get('gs_deliveries', 'delivery_date=eq.'+today); } catch(e){}
+
+  // ── Categorise alerts ──
+
+  // 1. Zero / negative balance (Active customers)
+  var zeroBal = customers.filter(function(c){
+    return (c.status==='Active'||c.status==='Grace') && getWallet(c.id).balance <= 0;
+  });
+
+  // 2. Low balance (under 3 days, Active)
+  var lowBal = customers.filter(function(c){
+    var d = daysRemaining(c.id);
+    return c.status==='Active' && d > 0 && d < 3;
+  });
+
+  // 3. Grace period customers with days used
+  var graceCustomers = customers.filter(function(c){ return c.status==='Grace'; }).map(function(c){
+    var graceDays = c.grace_days || 3;
+    var graceDeliveries = todayDel.filter(function(d){ return String(d.customer_id)===String(c.id) && d.status!=='Not Delivered';}).length;
+    return { c:c, used:graceDeliveries, total:graceDays, remaining:Math.max(0,graceDays-graceDeliveries) };
+  });
+
+  // 4. Resuming today
+  var resumingToday = customers.filter(function(c){
+    return c.pause_resume===today && c.pause_from && c.pause_from<=today;
+  });
+
+  // 5. Resuming tomorrow
+  var resumingTomorrow = customers.filter(function(c){
+    return c.pause_resume===tomorrow && c.pause_from && c.pause_from<=tomorrow;
+  });
+
+  // 6. Missed deliveries — routes with customers but no delivery entries today
+  var missedRoutes = [];
+  routes.forEach(function(route){
+    var expected = customers.filter(function(c){
+      return String(c.route_id)===String(route.id) && c.status!=='Stopped' && !isOnPause(c,today) && isDeliveryDay(c,today) && ((c.morning_quota||0)+(c.evening_quota||0))>0;
+    });
+    var done = todayDel.filter(function(d){ return String(d.route_id)===String(route.id);}).map(function(d){ return d.customer_id;}).filter(function(v,i,a){ return a.indexOf(v)===i;}).length;
+    if (expected.length > 0 && done === 0) {
+      missedRoutes.push({ route:route, expected:expected.length });
+    }
+  });
+
+  // 7. Customers stopping soon (balance will last < 7 days)
+  var warnBal = customers.filter(function(c){
+    var d = daysRemaining(c.id);
+    return c.status==='Active' && d >= 3 && d < 7;
+  });
+
+  var totalAlerts = zeroBal.length + lowBal.length + graceCustomers.length + resumingToday.length + missedRoutes.length;
+
+  var html = '';
+
+  // Summary bar
+  html += '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:18px">';
+  html += dashStat('Zero Balance', zeroBal.length, zeroBal.length>0?'var(--danger)':'var(--text-hint)', 'needs top-up');
+  html += dashStat('Low Balance', lowBal.length, lowBal.length>0?'var(--accent)':'var(--text-hint)', 'under 3 days');
+  html += dashStat('Grace Period', graceCustomers.length, graceCustomers.length>0?'var(--accent)':'var(--text-hint)', 'at risk');
+  html += dashStat('Resuming Today', resumingToday.length, resumingToday.length>0?'var(--brand)':'var(--text-hint)', 'include in route');
+  html += dashStat('Missed Routes', missedRoutes.length, missedRoutes.length>0?'var(--danger)':'var(--text-hint)', 'no entries today');
+  html += '</div>';
+
+  if (totalAlerts === 0 && resumingTomorrow.length === 0) {
+    html += '<div class="empty"><div class="empty-icon">✅</div><p>All clear! No alerts for today.</p></div>';
+    document.getElementById('content').innerHTML = html;
+    return;
+  }
+
+  // ── Missed Delivery Alert ──
+  if (missedRoutes.length > 0) {
+    html += '<div class="card" style="margin-bottom:14px;border-left:4px solid var(--danger)">';
+    html += '<div class="card-header"><div class="card-title" style="color:var(--danger)">🚨 Missed Deliveries — No entries recorded today</div></div>';
+    missedRoutes.forEach(function(mr){
+      html += '<div style="padding:12px 18px;border-bottom:1px solid #eef2f0;display:flex;align-items:center;justify-content:space-between">';
+      html += '<div><div style="font-weight:600">'+esc(mr.route.name)+'</div>';
+      html += '<div style="font-size:12px;color:var(--text-muted)">'+mr.expected+' customers expected &middot; '+(mr.route.milkman?'Milkman: '+esc(mr.route.milkman):'No milkman assigned')+'</div></div>';
+      html += '<button class="btn btn-primary btn-sm" onclick="openMissedDelivery('+mr.route.id+')">Open Delivery</button>';
+      html += '</div>';
+    });
+    html += '</div>';
+  }
+
+  // ── Zero Balance ──
+  if (zeroBal.length > 0) {
+    html += '<div class="card" style="margin-bottom:14px;border-left:4px solid var(--danger)">';
+    html += '<div class="card-header"><div class="card-title" style="color:var(--danger)">🔴 Zero / Negative Balance ('+zeroBal.length+')</div><div style="font-size:12px;color:var(--text-muted)">Supply at risk</div></div>';
+    html += '<div class="tbl-wrap"><table><thead><tr><th>Customer</th><th>Balance</th><th>Daily Cost</th><th>Status</th><th>Actions</th></tr></thead><tbody>';
+    zeroBal.forEach(function(c){
+      var w = getWallet(c.id); var rt = routes.find(function(r){ return r.id===c.route_id;}); var cost = ((c.morning_quota||0)+(c.evening_quota||0))*rate;
+      var wa = (c.whatsapp||c.phone||'').replace(/[^0-9]/g,'');
+      html += '<tr><td><div class="td-primary">'+esc(c.first_name)+' '+esc(c.last_name)+'</div><div class="td-sub">'+esc(c.customer_code||'')+' &middot; '+(rt?esc(rt.name):'')+'</div></td>';
+      html += '<td style="color:var(--danger);font-weight:700">Rs.'+(w.balance||0).toFixed(0)+'</td>';
+      html += '<td>Rs.'+cost.toFixed(0)+'/day</td>';
+      html += '<td><span class="badge badge-'+(c.status||'Active')+'">'+(c.status||'Active')+'</span></td>';
+      html += '<td><div class="acts">';
+      if (wa) { var msg='Dear+'+encodeURIComponent(c.first_name||'')+',+your+milk+wallet+balance+is+Rs.'+(w.balance||0).toFixed(0)+'.+Please+top+up+immediately.+GauRas+Milk.'; html += '<a href="https://wa.me/91'+wa+'?text='+msg+'" target="_blank" class="btn btn-outline btn-xs">WA</a>'; }
+      html += '<button class="btn btn-primary btn-xs" onclick="openTopup('+c.id+')">Top-up</button>';
+      html += '</div></td></tr>';
+    });
+    html += '</tbody></table></div></div>';
+  }
+
+  // ── Low Balance ──
+  if (lowBal.length > 0) {
+    html += '<div class="card" style="margin-bottom:14px;border-left:4px solid var(--accent)">';
+    html += '<div class="card-header"><div class="card-title" style="color:var(--accent)">🟡 Low Balance — Under 3 Days ('+lowBal.length+')</div></div>';
+    html += '<div class="tbl-wrap"><table><thead><tr><th>Customer</th><th>Balance</th><th>Days Left</th><th>Actions</th></tr></thead><tbody>';
+    lowBal.forEach(function(c){
+      var w=getWallet(c.id); var d=daysRemaining(c.id); var rt=routes.find(function(r){ return r.id===c.route_id;}); var wa=(c.whatsapp||c.phone||'').replace(/[^0-9]/g,'');
+      html += '<tr><td><div class="td-primary">'+esc(c.first_name)+' '+esc(c.last_name)+'</div><div class="td-sub">'+esc(c.customer_code||'')+' &middot; '+(rt?esc(rt.name):'')+'</div></td>';
+      html += '<td style="font-weight:600">Rs.'+(w.balance||0).toFixed(0)+'</td>';
+      html += '<td>'+daysPillHtml(d)+'</td>';
+      html += '<td><div class="acts">';
+      if (wa) { var msg2='Dear+'+encodeURIComponent(c.first_name||'')+',+your+milk+wallet+balance+is+Rs.'+(w.balance||0).toFixed(0)+'+with+only+'+d+'+days+remaining.+Please+top+up.+GauRas+Milk.'; html += '<a href="https://wa.me/91'+wa+'?text='+msg2+'" target="_blank" class="btn btn-outline btn-xs">WA</a>'; }
+      html += '<button class="btn btn-primary btn-xs" onclick="openTopup('+c.id+')">Top-up</button>';
+      html += '</div></td></tr>';
+    });
+    html += '</tbody></table></div></div>';
+  }
+
+  // ── Grace Period ──
+  if (graceCustomers.length > 0) {
+    html += '<div class="card" style="margin-bottom:14px;border-left:4px solid var(--accent)">';
+    html += '<div class="card-header"><div class="card-title" style="color:var(--accent)">⏳ Grace Period Customers ('+graceCustomers.length+')</div><div style="font-size:12px;color:var(--text-muted)">Supply will stop when grace days exhausted</div></div>';
+    html += '<div class="tbl-wrap"><table><thead><tr><th>Customer</th><th>Grace Days</th><th>Used</th><th>Remaining</th><th>Actions</th></tr></thead><tbody>';
+    graceCustomers.forEach(function(g){
+      var c=g.c; var rt=routes.find(function(r){ return r.id===c.route_id;});
+      var urgentColor = g.remaining<=1?'var(--danger)':'var(--accent)';
+      html += '<tr><td><div class="td-primary">'+esc(c.first_name)+' '+esc(c.last_name)+'</div><div class="td-sub">'+esc(c.customer_code||'')+' &middot; '+(rt?esc(rt.name):'')+'</div></td>';
+      html += '<td style="text-align:center">'+g.total+'</td>';
+      html += '<td style="text-align:center;color:var(--accent);font-weight:600">'+g.used+'</td>';
+      html += '<td style="text-align:center;font-weight:700;color:'+urgentColor+'">'+g.remaining+'</td>';
+      html += '<td><button class="btn btn-primary btn-xs" onclick="openTopup('+c.id+')">Top-up</button></td></tr>';
+    });
+    html += '</tbody></table></div></div>';
+  }
+
+  // ── Resuming Today ──
+  if (resumingToday.length > 0) {
+    html += '<div class="card" style="margin-bottom:14px;border-left:4px solid var(--brand)">';
+    html += '<div class="card-header"><div class="card-title" style="color:var(--brand)">🔔 Resuming Today ('+resumingToday.length+')</div><div style="font-size:12px;color:var(--text-muted)">Include in delivery route</div></div>';
+    resumingToday.forEach(function(c){
+      var rt=routes.find(function(r){ return r.id===c.route_id;});
+      html += '<div style="padding:11px 18px;border-bottom:1px solid #eef2f0;display:flex;align-items:center;gap:12px">';
+      html += '<div style="flex:1"><div style="font-weight:600">'+esc(c.first_name)+' '+esc(c.last_name)+'</div>';
+      html += '<div style="font-size:12px;color:var(--text-muted)">'+esc(c.customer_code||'')+' &middot; '+(rt?esc(rt.name):'')+' &middot; '+(c.morning_quota||0)+'L+'+(c.evening_quota||0)+'L</div></div>';
+      html += '<span class="badge badge-Active">Resuming</span></div>';
+    });
+    html += '</div>';
+  }
+
+  // ── Resuming Tomorrow ──
+  if (resumingTomorrow.length > 0) {
+    html += '<div class="card" style="margin-bottom:14px;border-left:4px solid #378ADD">';
+    html += '<div class="card-header"><div class="card-title" style="color:#0C447C">⏰ Resuming Tomorrow ('+resumingTomorrow.length+')</div><div style="font-size:12px;color:var(--text-muted)">Inform milkman to include tomorrow</div></div>';
+    resumingTomorrow.forEach(function(c){
+      var rt=routes.find(function(r){ return r.id===c.route_id;});
+      html += '<div style="padding:11px 18px;border-bottom:1px solid #eef2f0;display:flex;align-items:center;gap:12px">';
+      html += '<div style="flex:1"><div style="font-weight:600">'+esc(c.first_name)+' '+esc(c.last_name)+'</div>';
+      html += '<div style="font-size:12px;color:var(--text-muted)">'+esc(c.customer_code||'')+' &middot; '+(rt?esc(rt.name):'')+' &middot; '+(c.morning_quota||0)+'L+'+(c.evening_quota||0)+'L</div></div>';
+      html += '<span class="sched-pill">Tomorrow</span></div>';
+    });
+    html += '</div>';
+  }
+
+  // ── Warning — Balance under 7 days ──
+  if (warnBal.length > 0) {
+    html += '<div class="card" style="margin-bottom:14px">';
+    html += '<div class="card-header"><div class="card-title">⚠️ Balance Running Low — 3 to 7 Days ('+warnBal.length+')</div></div>';
+    html += '<div class="tbl-wrap"><table><thead><tr><th>Customer</th><th>Balance</th><th>Days Left</th><th>Actions</th></tr></thead><tbody>';
+    warnBal.forEach(function(c){
+      var w=getWallet(c.id); var d=daysRemaining(c.id); var rt=routes.find(function(r){ return r.id===c.route_id;});
+      html += '<tr><td><div class="td-primary">'+esc(c.first_name)+' '+esc(c.last_name)+'</div><div class="td-sub">'+esc(c.customer_code||'')+' &middot; '+(rt?esc(rt.name):'')+'</div></td>';
+      html += '<td>Rs.'+(w.balance||0).toFixed(0)+'</td>';
+      html += '<td>'+daysPillHtml(d)+'</td>';
+      html += '<td><button class="btn btn-outline btn-xs" onclick="openTopup('+c.id+')">Top-up</button></td></tr>';
+    });
+    html += '</tbody></table></div></div>';
+  }
+
+  document.getElementById('content').innerHTML = html;
+}
+
+// ══════════════════════════════════════
+// BOTTLE TRACKING PAGE
+// ══════════════════════════════════════
+let bottleViewDate = todayStr ? todayStr() : new Date().toISOString().split('T')[0];
+let bottleRouteFilter = '';
+
+async function renderBottleTracking() {
+  var body = document.getElementById('content');
+  body.innerHTML = '<div style="padding:20px;color:var(--text-muted)">Loading bottle data...</div>';
+
+  // Load bottle logs for all time (for reconciliation)
+  var allLogs = [];
+  try { allLogs = await db.get('gs_bottle_log', 'order=log_date.desc'); } catch(e){}
+
+  // Load today deliveries for per-customer empties
+  var todayDel = [];
+  try { todayDel = await db.get('gs_deliveries', 'delivery_date=eq.'+bottleViewDate); } catch(e){}
+
+  var html = '';
+
+  // Date + route filter bar
+  var routeOpts = '<option value="">All Routes</option>'
+    + routes.map(function(r){ return '<option value="'+r.id+'"'+(bottleRouteFilter==r.id?' selected':'')+'>'+esc(r.name)+'</option>';}).join('');
+
+  html += '<div style="background:var(--brand-light);border-radius:var(--radius);padding:10px 16px;margin-bottom:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">';
+  html += '<input type="date" value="'+bottleViewDate+'" max="'+todayStr()+'" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;outline:none;background:#fff" onchange="bottleViewDate=this.value;renderBottleTracking()">';
+  html += '<select style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;outline:none;background:#fff" onchange="bottleRouteFilter=this.value;renderBottleTracking()">'+routeOpts+'</select>';
+  html += '<button class="btn btn-outline btn-sm" onclick="bottleViewDate=todayStr();renderBottleTracking()">Today</button>';
+  html += '<button class="btn btn-primary btn-sm" onclick="exportBottleCSV()">Export CSV</button>';
+  html += '</div>';
+
+  // Filter logs by date and route
+  var dayLogs = allLogs.filter(function(b){
+    var ok1 = b.log_date === bottleViewDate;
+    var ok2 = !bottleRouteFilter || String(b.route_id)===String(bottleRouteFilter);
+    return ok1 && ok2;
+  });
+
+  // Summary cards for selected date
+  var totOut = dayLogs.reduce(function(s,b){ return s+(b.filled_out||0);},0);
+  var totFRet = dayLogs.reduce(function(s,b){ return s+(b.filled_returned||0);},0);
+  var totEmp = dayLogs.reduce(function(s,b){ return s+(b.empty_collected||0);},0);
+  var custEmp = todayDel.filter(function(d){ return !bottleRouteFilter||String(d.route_id)===String(bottleRouteFilter);}).reduce(function(s,d){ return s+(d.empty_bottles||0);},0);
+  var variance = totOut - totFRet - custEmp;
+
+  html += '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:16px">';
+  html += dashStat('Filled Out', totOut, 'var(--brand)', 'taken for delivery');
+  html += dashStat('Filled Returned', totFRet, 'var(--accent)', 'unsold / refused');
+  html += dashStat('Empty Collected', custEmp, '#0C447C', 'from customers');
+  html += dashStat('Route Log Empties', totEmp, '#0C447C', 'route-level log');
+  html += dashStat('Variance', variance, variance===0?'var(--brand)':'var(--danger)', variance===0?'all accounted':'needs check');
+  html += '</div>';
+
+  // Route-wise breakdown for selected date
+  html += '<div class="card" style="margin-bottom:16px">';
+  html += '<div class="card-header"><div class="card-title">Route-wise Bottle Log</div><div style="font-size:12px;color:var(--text-muted)">'+fmtDate(bottleViewDate)+'</div></div>';
+
+  if (dayLogs.length===0) {
+    html += '<div class="empty"><div class="empty-icon">🍼</div><p>No bottle log entries for this date.'+(bottleRouteFilter?' Try removing the route filter.':'')+'</p></div>';
+  } else {
+    html += '<div class="tbl-wrap"><table><thead><tr><th>Route</th><th>Session</th><th>Filled Out</th><th>Filled Returned</th><th>Empty Collected</th><th>Customer Empties</th><th>Variance</th></tr></thead><tbody>';
+    dayLogs.forEach(function(b){
+      var rt = routes.find(function(r){ return String(r.id)===String(b.route_id);});
+      var cEmp = todayDel.filter(function(d){ return String(d.route_id)===String(b.route_id) && d.session===b.session;}).reduce(function(s,d){ return s+(d.empty_bottles||0);},0);
+      var v = (b.filled_out||0)-(b.filled_returned||0)-cEmp;
+      html += '<tr>'
+        +'<td><span class="badge badge-route">'+esc(rt?rt.name:'Unknown')+'</span></td>'
+        +'<td>'+esc(b.session||'')+'</td>'
+        +'<td style="font-weight:600;color:var(--brand)">'+(b.filled_out||0)+'</td>'
+        +'<td style="color:var(--accent)">'+(b.filled_returned||0)+'</td>'
+        +'<td style="color:#0C447C">'+(b.empty_collected||0)+'</td>'
+        +'<td style="color:#0C447C">'+cEmp+'</td>'
+        +'<td style="font-weight:600;color:'+(v===0?'var(--brand)':'var(--danger)')+'">'+v+'</td>'
+        +'</tr>';
+    });
+    html += '</tbody></table></div>';
+  }
+  html += '</div>';
+
+  // Historical log — last 30 entries
+  html += '<div class="card">';
+  html += '<div class="card-header"><div class="card-title">Recent Bottle Log History</div><div style="font-size:12px;color:var(--text-muted)">Last 30 entries</div></div>';
+  var histLogs = bottleRouteFilter ? allLogs.filter(function(b){ return String(b.route_id)===String(bottleRouteFilter);}) : allLogs;
+  if (histLogs.length===0) {
+    html += '<div class="empty"><div class="empty-icon">🍼</div><p>No bottle logs recorded yet.</p></div>';
+  } else {
+    html += '<div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Route</th><th>Session</th><th>Filled Out</th><th>Filled Returned</th><th>Empty Collected</th></tr></thead><tbody>';
+    histLogs.slice(0,30).forEach(function(b){
+      var rt=routes.find(function(r){ return String(r.id)===String(b.route_id);});
+      html += '<tr>'
+        +'<td>'+fmtDate(b.log_date)+'</td>'
+        +'<td><span class="badge badge-route">'+esc(rt?rt.name:'Unknown')+'</span></td>'
+        +'<td>'+esc(b.session||'')+'</td>'
+        +'<td style="color:var(--brand);font-weight:600">'+(b.filled_out||0)+'</td>'
+        +'<td style="color:var(--accent)">'+(b.filled_returned||0)+'</td>'
+        +'<td style="color:#0C447C">'+(b.empty_collected||0)+'</td>'
+        +'</tr>';
+    });
+    html += '</tbody></table></div>';
+  }
+  html += '</div>';
+
+  body.innerHTML = html;
+}
+
+function exportBottleCSV() {
+  var hdr = ['Date','Route','Session','Filled Out','Filled Returned','Empty Collected'];
+  var rows = [hdr];
+  db.get('gs_bottle_log','order=log_date.desc').then(function(logs){
+    logs.forEach(function(b){
+      var rt=routes.find(function(r){ return String(r.id)===String(b.route_id);});
+      rows.push([b.log_date, rt?rt.name:'', b.session||'', b.filled_out||0, b.filled_returned||0, b.empty_collected||0]);
+    });
+    var lines = rows.map(function(r){ return r.map(function(x){ return '"'+String(x||'').replace(/"/g,'""')+'"';}).join(',');});
+    var blob = new Blob([lines.join(String.fromCharCode(13,10))],{type:'text/csv'});
+    var a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='bottle-log.csv'; a.click();
+  });
 }
 
 // ── HELPERS ──
