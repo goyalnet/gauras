@@ -293,6 +293,8 @@
     <header class="topbar">
       <button id="hamburger" onclick="toggleSidebar()" style="display:none;background:none;border:none;font-size:22px;cursor:pointer;padding:4px 8px;color:var(--text);line-height:1">&#9776;</button>
       <div class="page-title" id="page-title">Customers</div>
+      <div id="last-sync" style="font-size:11px;color:var(--text-hint)"></div>
+      <button onclick="refreshAll()" title="Refresh data" style="background:none;border:1px solid var(--border);border-radius:7px;padding:5px 10px;cursor:pointer;font-size:13px;color:var(--text-muted);font-family:inherit" id="refresh-btn">&#8635; Refresh</button>
       <span class="role-badge">Admin</span>
     </header>
     <div class="content" id="content"></div>
@@ -641,6 +643,29 @@ async function boot() {
   go('dashboard');
 }
 
+let _currentPage = 'customers';
+
+async function refreshAll() {
+  var btn = document.getElementById('refresh-btn');
+  if (btn) { btn.textContent = '⏳ Refreshing...'; btn.disabled = true; }
+  try {
+    routes     = await db.get('gs_routes',    'order=name.asc');
+    customers  = await db.get('gs_customers', 'order=last_name.asc,first_name.asc');
+    rates      = await db.get('gs_rates',     'order=effective_from.desc');
+    overrides  = await db.get('gs_quantity_overrides', 'order=from_date.asc');
+    wallets    = await db.get('gs_wallets',  'order=customer_id.asc');
+    topups     = await db.get('gs_topups',   'order=topup_date.desc');
+    deliveries = await db.get('gs_deliveries', 'delivery_date=eq.'+todayStr()+'&order=created_at.asc');
+    bottleLogs = await db.get('gs_bottle_log', 'log_date=eq.'+todayStr());
+    var syncEl = document.getElementById('last-sync');
+    if (syncEl) syncEl.textContent = 'Synced ' + new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+    // Re-render current page
+    go(_currentPage);
+    toast('Data refreshed', 'success');
+  } catch(e) { toast('Refresh failed: '+e.message, 'error'); }
+  finally { if (btn) { btn.textContent = '&#8635; Refresh'; btn.disabled = false; } }
+}
+
 function toggleSidebar() {
   var sb = document.querySelector('.sidebar');
   var ov = document.getElementById('sidebar-overlay');
@@ -664,6 +689,7 @@ document.addEventListener('DOMContentLoaded', function() {
 const PAGE_TITLES = { customers:'Customers', routes:'Routes', masters:'Masters', dashboard:'Dashboard', delivery:'Daily Delivery', wallet:'Wallet & Payments', bottles:'Bottle Tracking', reports:'Reports', alerts:'Alerts' };
 
 function go(page) {
+  _currentPage = page;
   document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(el => { if (el.textContent.trim().toLowerCase().includes(page)) el.classList.add('active'); });
   document.getElementById('page-title').textContent = PAGE_TITLES[page] || page;
@@ -1912,8 +1938,11 @@ function renderWallet() {
 }
 
 // ── WALLET DETAIL (top-up history per customer) ──
-function openWalletDetail(custId) {
+let walletDetailTab = 'topups'; // 'topups' or 'deliveries'
+
+async function openWalletDetail(custId) {
   walletCustId = custId;
+  walletDetailTab = walletDetailTab || 'topups';
   const c = customers.find(x => x.id === custId);
   if (!c) return;
   const w = getWallet(custId);
@@ -1923,6 +1952,10 @@ function openWalletDetail(custId) {
   const custTopups = topups.filter(t => String(t.customer_id)===String(custId));
   const heroClass = w.balance > 0 ? 'positive' : 'zero';
   const overdueAmt = w.balance < 0 ? Math.abs(w.balance) : 0;
+
+  // Load delivery history for this customer
+  var custDeliveries = [];
+  try { custDeliveries = await db.get('gs_deliveries', 'customer_id=eq.'+custId+'&order=delivery_date.desc&limit=90'); } catch(e){}
 
   const histRows = custTopups.length === 0
     ? '<div class="empty"><div class="empty-icon">&#x1F4B0;</div><p>No top-ups recorded yet.</p></div>'
@@ -1985,13 +2018,40 @@ function openWalletDetail(custId) {
         <div class="td-sub" style="margin-top:4px">at current usage</div>
       </div>
     </div>
+    <div class="tabs" style="margin-bottom:0">
+      <div class="tab${walletDetailTab==='topups'?' active':''}" onclick="walletDetailTab='topups';openWalletDetail(${custId})">Top-up History</div>
+      <div class="tab${walletDetailTab==='deliveries'?' active':''}" onclick="walletDetailTab='deliveries';openWalletDetail(${custId})">Delivery History</div>
+    </div>
+    ${walletDetailTab==='topups' ? `
     <div class="card">
       <div class="card-header">
         <div class="card-title">Top-up History</div>
         <div style="font-size:12px;color:var(--text-muted)">${custTopups.length} records</div>
       </div>
       ${histRows}
-    </div>`;
+    </div>` : `
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">Delivery History</div>
+        <div style="font-size:12px;color:var(--text-muted)">Last 90 days</div>
+      </div>
+      ${custDeliveries.length===0
+        ? '<div class="empty"><div class="empty-icon">🚴</div><p>No delivery records found.</p></div>'
+        : '<div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Session</th><th>Qty</th><th>Status</th><th>Deducted</th><th>Empties</th></tr></thead><tbody>'
+          + custDeliveries.map(function(d){
+              var sc = d.status==='Delivered'?'var(--brand)':d.status==='Partial'?'var(--accent)':'var(--danger)';
+              return '<tr>'
+                +'<td>'+fmtDate(d.delivery_date)+'</td>'
+                +'<td>'+esc(d.session||'')+'</td>'
+                +'<td style="font-weight:600">'+(d.qty_delivered||0)+'L</td>'
+                +'<td><span style="color:'+sc+';font-weight:600;font-size:12px">'+esc(d.status||'')+'</span>'+(d.reason?'<div class="td-sub">'+esc(d.reason)+'</div>':'')+'</td>'
+                +'<td style="color:var(--danger)">Rs.'+(d.amount_deducted||0).toFixed(0)+'</td>'
+                +'<td>'+(d.empty_bottles||0)+'</td>'
+                +'</tr>';
+            }).join('')
+          + '</tbody></table></div>'
+      }
+    </div>`}`;
 }
 
 // ── EDIT / DELETE TOP-UP ──
@@ -2143,6 +2203,25 @@ async function saveTopup() {
     }
 
     closeM('topup-modal');
+
+    // WhatsApp receipt option
+    var c2 = customers.find(function(x){ return x.id===walletCustId; });
+    var wa = c2 ? (c2.whatsapp||c2.phone||'').replace(/[^0-9]/g,'') : '';
+    var newBal2 = 0;
+    var w2 = wallets.find(function(x){ return String(x.customer_id)===String(walletCustId); });
+    if (w2) newBal2 = w2.balance||0;
+    if (wa && c2) {
+      var receiptMsg = 'Dear+'+encodeURIComponent(c2.first_name||'')
+        +',+Payment+of+Rs.'+amount+'+received+on+'+fmtDate(date).replace(/ /g,'+')+'.'
+        +'+Mode:+'+(topupData.payment_mode||'Cash')+'.'
+        +'+New+balance:+Rs.'+newBal2.toFixed(0)+'.'
+        +'+Thank+you%21+GauRas+Milk.';
+      var waUrl = 'https://wa.me/91'+wa+'?text='+receiptMsg;
+      if (confirm('Top-up saved! Send WhatsApp receipt to '+c2.first_name+'?')) {
+        window.open(waUrl, '_blank');
+      }
+    }
+
     // Refresh current view
     if (walletCustId && document.getElementById('content').innerHTML.includes('Back to Wallets')) {
       openWalletDetail(walletCustId);
@@ -2182,6 +2261,7 @@ function exportWalletCSV() {
 
 let deliveryRoute = '';
 let deliverySession = 'Morning';
+let deliverySearch = '';
 let deliveryDate = todayStr ? todayStr() : new Date().toISOString().split('T')[0];
 let deliveryEntries = {}; // custId -> { status, qty, bottles, reason }
 
@@ -2228,6 +2308,17 @@ function renderDelivery() {
     return true;
   });
 
+  // Apply search filter
+  if (deliverySearch) {
+    var ds = deliverySearch.toLowerCase();
+    routeCustomers = routeCustomers.filter(function(c){
+      return ((c.first_name||'')+(c.last_name||'')).toLowerCase().includes(ds)
+        || (c.customer_code||'').toLowerCase().includes(ds)
+        || (c.phone||'').includes(ds)
+        || (c.flat_no||'').toLowerCase().includes(ds)
+        || (c.building_name||'').toLowerCase().includes(ds);
+    });
+  }
   // Sort by delivery sequence
   routeCustomers.sort(function(a,b) { return (a.delivery_sequence||999)-(b.delivery_sequence||999); });
 
@@ -2342,6 +2433,7 @@ function renderDelivery() {
   html += '</div>';
   html += '<select class="del-route-select" style="font-size:13px;padding:7px 12px;color:var(--text);background:#fff;border:1.5px solid var(--border);border-radius:8px;min-width:180px" onchange="deliveryRoute=this.value;renderDelivery()">'+routeOpts+'</select>';
   html += '<div style="display:flex;align-items:center;gap:6px;margin-top:4px">';
+  html += '<input placeholder="Search customer..." value="'+deliverySearch+'" oninput="deliverySearch=this.value;renderDelivery()" style="padding:6px 10px;border-radius:7px;border:1px solid var(--border);font-size:12px;font-family:inherit;background:#fff;outline:none;width:160px">';
   html += '<input type="date" value="'+today+'" max="'+todayStr()+'" onchange="changeDeliveryDate(this.value)" style="padding:6px 10px;border-radius:7px;border:1px solid var(--border);font-size:12px;font-family:inherit;color:var(--text);background:#fff;outline:none">';
   html += (isToday ? '' : '<button onclick="changeDeliveryDate(todayStr())" style="padding:5px 10px;border:1px solid var(--border);border-radius:6px;font-size:11px;background:#fff;color:var(--text-muted);cursor:pointer;font-family:inherit">&#8617; Today</button>');
   html += '</div>';
