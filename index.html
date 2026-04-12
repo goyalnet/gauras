@@ -315,7 +315,7 @@
       <div class="fsection">
         <div class="fsection-title">Identity</div>
         <div class="form-3">
-          <div class="fg"><label class="flabel">Customer Code <span class="req">*</span></label><input class="fcontrol" id="c-code" placeholder="e.g. GR-001"></div>
+          <div class="fg"><label class="flabel">Customer Code <span class="req">*</span></label><input class="fcontrol" id="c-code" placeholder="e.g. GR-001" oninput="checkDupCode(this)"><span class="fhint" id="code-dup-warn" style="color:var(--danger);display:none">⚠ This code is already used by another customer</span></div>
           <div class="fg"><label class="flabel">First Name <span class="req">*</span></label><input class="fcontrol" id="c-fname" placeholder="First name"></div>
           <div class="fg"><label class="flabel">Last Name <span class="req">*</span></label><input class="fcontrol" id="c-lname" placeholder="Last name"></div>
           <div class="fg"><label class="flabel">Phone <span class="req">*</span></label><input class="fcontrol" id="c-phone" placeholder="10-digit mobile" oninput="checkDupPhone(this)"><span class="fhint" id="phone-dup-warn" style="color:var(--danger);display:none">⚠ This phone number is already used by another customer</span></div>
@@ -644,6 +644,29 @@ async function boot() {
 }
 
 let _currentPage = 'customers';
+let _autoRefreshTimer = null;
+
+function startAutoRefresh() {
+  stopAutoRefresh();
+  _autoRefreshTimer = setInterval(function() {
+    if (_currentPage === 'dashboard') {
+      // Silent refresh for dashboard only
+      Promise.all([
+        db.get('gs_deliveries','delivery_date=eq.'+todayStr()+'&order=created_at.asc').catch(function(){ return deliveries; }),
+        db.get('gs_topups','topup_date=eq.'+todayStr()).catch(function(){ return []; })
+      ]).then(function(results) {
+        deliveries = results[0];
+        var syncEl = document.getElementById('last-sync');
+        if (syncEl) syncEl.textContent = 'Auto-synced '+new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+        renderDashboard();
+      });
+    }
+  }, 3 * 60 * 1000); // every 3 minutes
+}
+
+function stopAutoRefresh() {
+  if (_autoRefreshTimer) { clearInterval(_autoRefreshTimer); _autoRefreshTimer = null; }
+}
 
 async function refreshAll() {
   var btn = document.getElementById('refresh-btn');
@@ -690,6 +713,8 @@ const PAGE_TITLES = { customers:'Customers', routes:'Routes', masters:'Masters',
 
 function go(page) {
   _currentPage = page;
+  if (page === 'dashboard') startAutoRefresh();
+  else stopAutoRefresh();
   document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(el => { if (el.textContent.trim().toLowerCase().includes(page)) el.classList.add('active'); });
   document.getElementById('page-title').textContent = PAGE_TITLES[page] || page;
@@ -853,7 +878,7 @@ function renderCustomers() {
         ${list.length === 0
           ? `<div class="empty"><div class="empty-icon">👥</div><p>${total===0?'No customers yet. Add your first customer!':'No customers match the current filters.'}</p></div>`
           : `<table>
-              <thead><tr><th>Code</th><th>Name</th><th>Contact</th><th>Address</th><th>Route</th><th>Schedule</th><th>Quota / Day</th><th>Payment</th><th>Status</th><th>Actions</th></tr></thead>
+              <thead><tr><th>Code</th><th>Name</th><th>Contact</th><th>Address</th><th>Route</th><th>Schedule</th><th>Quota / Day</th><th>Since</th><th>Status</th><th>Actions</th></tr></thead>
               <tbody>${list.map(c => {
                 const route = routes.find(r => r.id === c.route_id);
                 const ovDay = getEffectiveQty(c.id, viewDate);
@@ -873,7 +898,7 @@ function renderCustomers() {
                     <div style="font-weight:${isOv?'700':'400'};color:${isOv?'#0C447C':'inherit'}">${totalQ}L${isOv?' ⚖️':''}</div>
                     <div class="td-sub">${mQ}L morn · ${eQ}L eve${isOv?`<span style="color:#0C447C"> (override)</span>`:''}</div>
                   </td>
-                  <td>${esc(c.payment_mode||'--')}</td>
+                  <td><div style="font-size:12px;color:var(--text-muted)">${c.joining_date?fmtDate(c.joining_date):'--'}</div></td>
                   <td><span class="badge badge-${c.status||'Active'}">${c.status||'Active'}</span></td>
                   <td>
                     <div class="acts">
@@ -1181,6 +1206,7 @@ function renderCustomerMaster() {
       + '<td><div class="td-primary">'+esc(c.first_name||'')+' '+esc(c.last_name||'')+'</div><div class="td-sub">'+esc(c.phone||'')+'</div></td>'
       + '<td>'+(rt?'<span class="badge badge-route">'+esc(rt.name)+'</span>':'--')+'</td>'
       + '<td>'+( c.morning_quota||0)+'L + '+(c.evening_quota||0)+'L</td>'
+      + '<td style="font-size:12px;color:var(--text-muted)">'+(c.joining_date?fmtDate(c.joining_date):'--')+'</td>'
       + '<td style="font-weight:600;color:'+(w.balance>=0?'var(--brand)':'var(--danger)')+'">Rs.'+(w.balance||0).toFixed(0)+'</td>'
       + '<td><span class="badge badge-'+(c.status||'Active')+'">'+(c.status||'Active')+'</span></td>'
       + '<td><div class="acts">'
@@ -1208,7 +1234,7 @@ function renderCustomerMaster() {
     + '</div>'
     + (list.length===0
       ? '<div class="empty"><div class="empty-icon">👥</div><p>No customers match filters.</p></div>'
-      : '<div class="tbl-wrap"><table><thead><tr><th>Code</th><th>Name</th><th>Route</th><th>Quota</th><th>Balance</th><th>Status</th><th>Actions</th></tr></thead><tbody>'+rows+'</tbody></table></div>')
+      : '<div class="tbl-wrap"><table><thead><tr><th>Code</th><th>Name</th><th>Route</th><th>Quota</th><th>Since</th><th>Balance</th><th>Status</th><th>Actions</th></tr></thead><tbody>'+rows+'</tbody></table></div>')
     + '<div class="pager"><div class="pager-info">'+list.length+' of '+customers.length+' customers</div></div>'
     + '</div>';
 
@@ -1357,6 +1383,13 @@ function fillRouteDrop(selId='') {
     routes.map(r=>`<option value="${r.id}" ${String(r.id)===String(selId)?'selected':''}>${esc(r.name)}</option>`).join('');
 }
 
+function checkDupCode(el) {
+  var code = el.value.trim();
+  var warn = document.getElementById('code-dup-warn');
+  var dup = customers.some(function(c){ return c.customer_code===code && c.id!==editCustId; });
+  if (warn) warn.style.display = dup ? 'block' : 'none';
+}
+
 function checkDupPhone(el) {
   const phone = el.value.trim();
   const warn = document.getElementById('phone-dup-warn');
@@ -1372,6 +1405,8 @@ async function saveCustomer() {
   if(!phone) return toast('Phone is required','error');
   const dupPhone = customers.some(c => c.phone === phone && c.id !== editCustId);
   if(dupPhone) return toast('This phone number is already used by another customer','error');
+  const dupCode = customers.some(c => c.customer_code === code && c.id !== editCustId);
+  if(dupCode) return toast('This customer code is already used by another customer','error');
   const schedType = v('c-sched-type');
   const selDays = schedType==='Custom'
     ? [...document.querySelectorAll('.day-btn.on')].map(b=>b.dataset.day).join(',')
@@ -1821,6 +1856,15 @@ function notionalBalance(c) {
   const today = todayStr();
   const w = getWallet(c.id);
   const bal = w.balance || 0;
+  // Check if delivery already done today for this customer
+  const todayDelivered = deliveries.filter(function(d){
+    return String(d.customer_id)===String(c.id) && d.delivery_date===today;
+  });
+  if (todayDelivered.length > 0) {
+    // Delivery already done — show actual current balance
+    var totalDeducted = todayDelivered.reduce(function(s,d){ return s+(d.amount_deducted||0);},0);
+    return { bal: bal, deduct: totalDeducted, note: 'Delivered today', status: c.status, done: true };
+  }
   // If paused today -- no deduction
   if (isOnPause(c, today)) return { bal, deduct: 0, note: 'Paused -- no deduction', status: c.status };
   // If not a delivery day for custom schedule
@@ -1844,6 +1888,11 @@ function notionalBalance(c) {
 }
 
 function notionalStatusBadge(ns) {
+  if (ns.done) {
+    var doneColor = ns.bal > 0 ? 'var(--brand)' : ns.bal === 0 ? 'var(--accent)' : 'var(--danger)';
+    return '<div style="font-weight:700;color:'+doneColor+'">Rs.'+(ns.bal>=0?ns.bal.toFixed(0):'-'+Math.abs(ns.bal).toFixed(0))+'</div>'
+      + '<div class="td-sub" style="color:var(--brand)">✓ Delivered today</div>';
+  }
   if (ns.note) return '<span style="font-size:11px;color:var(--text-hint)">'+ns.note+'</span>';
   var balStr = ns.bal >= 0 ? 'Rs.'+ns.bal.toFixed(0) : '-Rs.'+Math.abs(ns.bal).toFixed(0);
   var color = ns.bal > 0 ? 'var(--brand)' : ns.bal === 0 ? 'var(--accent)' : 'var(--danger)';
@@ -1852,7 +1901,7 @@ function notionalStatusBadge(ns) {
   else if (ns.status === 'Stopped') statusBadge = ' <span class="badge badge-Stopped">Stopped</span>';
   var ovNote = ns.hasOverride ? '<div class="td-sub" style="color:#0C447C">Override qty active</div>' : '';
   return '<div style="font-weight:700;color:'+color+'">'+balStr+'</div>'
-    + '<div class="td-sub">- Rs.'+ns.deduct.toFixed(0)+' ('+ns.mq+'L+'+ns.eq+'L)</div>'
+    + '<div class="td-sub">est. - Rs.'+ns.deduct.toFixed(0)+'</div>'
     + ovNote + statusBadge;
 }
 
@@ -2296,17 +2345,25 @@ function renderDelivery() {
 
   const route = routes.find(function(r) { return String(r.id)===String(deliveryRoute); });
 
-  // Get customers for this route, filtered for today's session and schedule
+  // Get active customers for this route (for delivery)
   let routeCustomers = customers.filter(function(c) {
     if (String(c.route_id) !== String(deliveryRoute)) return false;
     if (isOnPause(c, today)) return false;
     if (!isDeliveryDay(c, today)) return false;
     if (c.status === 'Stopped') return false;
-    // Filter by session quota
     if (deliverySession === 'Morning' && !(c.morning_quota > 0)) return false;
     if (deliverySession === 'Evening' && !(c.evening_quota > 0)) return false;
     return true;
   });
+
+  // Get skipped customers (paused/off-schedule) to show greyed
+  let skippedCustomers = customers.filter(function(c) {
+    if (String(c.route_id) !== String(deliveryRoute)) return false;
+    if (c.status === 'Stopped') return false;
+    var onPause = isOnPause(c, today);
+    var notToday = !isDeliveryDay(c, today);
+    return onPause || notToday;
+  }).sort(function(a,b){ return (a.delivery_sequence||999)-(b.delivery_sequence||999); });
 
   // Apply search filter
   if (deliverySearch) {
@@ -2391,9 +2448,11 @@ function renderDelivery() {
       + (function(){
           if (c.status!=='Grace') return '';
           var graceDays = c.grace_days||3;
+          // Count from all loaded deliveries (may be partial - shows minimum)
           var graceDeliveries = deliveries.filter(function(d){ return String(d.customer_id)===String(c.id) && d.status!=='Not Delivered';}).length;
           var remaining = Math.max(0, graceDays - graceDeliveries);
-          return '<div style="font-size:11px;font-weight:700;color:var(--danger);margin-top:2px">Grace: '+graceDeliveries+'/'+graceDays+' days used &middot; '+remaining+' remaining</div>';
+          var urgentColor = remaining<=1?'var(--danger)':'var(--accent)';
+          return '<div style="font-size:11px;font-weight:700;color:'+urgentColor+';margin-top:2px">Grace: '+graceDeliveries+' of '+graceDays+' days used &middot; '+remaining+' left</div>';
         })()
       + '</div>'
       + '<div class="del-status-btns">'
@@ -2430,6 +2489,7 @@ function renderDelivery() {
   html += '<div style="display:flex;gap:6px">';
   html += '<button class="del-session-btn'+(deliverySession==='Morning'?' active':'')+'" onclick="deliverySession=\'Morning\';renderDelivery()">Morning</button>';
   html += '<button class="del-session-btn'+(deliverySession==='Evening'?' active':'')+'" onclick="deliverySession=\'Evening\';renderDelivery()">Evening</button>';
+  // Note: deliverySearch persists across session toggles intentionally
   html += '</div>';
   html += '<select class="del-route-select" style="font-size:13px;padding:7px 12px;color:var(--text);background:#fff;border:1.5px solid var(--border);border-radius:8px;min-width:180px" onchange="deliveryRoute=this.value;renderDelivery()">'+routeOpts+'</select>';
   html += '<div style="display:flex;align-items:center;gap:6px;margin-top:4px">';
@@ -2480,14 +2540,37 @@ function renderDelivery() {
 
   if (isToday) {
     if (total > 0 && done < total) {
-      html += '<div style="text-align:center;padding:20px">';
+      html += '<div style="text-align:center;padding:20px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap">';
       html += '<button class="btn btn-primary" onclick="submitAllRoute()" style="padding:12px 32px;font-size:15px">Submit Entire Route</button>';
+      html += '<button class="btn btn-outline" onclick="printRouteList()">Print List</button>';
       html += '</div>';
     } else if (total > 0 && done === total) {
-      html += '<div style="text-align:center;padding:20px;color:var(--brand);font-weight:700;font-size:15px">Route complete! All entries saved.</div>';
+      html += '<div style="text-align:center;padding:20px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap">';
+      html += '<div style="color:var(--brand);font-weight:700;font-size:15px">Route complete! All entries saved.</div>';
+      html += '<button class="btn btn-outline btn-sm" onclick="printRouteList()">Print List</button>';
+      html += '</div>';
     }
   } else {
     html += '<div style="text-align:center;padding:16px;font-size:13px;color:var(--text-muted);background:var(--bg);border-radius:var(--radius);margin-top:8px">Viewing historical data for '+todayFmt+'. Switch to Today to record new deliveries.</div>';
+  }
+
+  // Show skipped customers greyed out
+  if (skippedCustomers.length > 0 && !deliverySearch) {
+    html += '<div style="margin-top:16px;border-top:1px solid var(--border);padding-top:12px">';
+    html += '<div style="font-size:11px;font-weight:700;color:var(--text-hint);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;padding:0 4px">Not delivering today ('+skippedCustomers.length+')</div>';
+    skippedCustomers.forEach(function(c) {
+      var onPause = isOnPause(c, today);
+      var reason = onPause ? 'Paused'+(c.pause_resume?' &middot; resumes '+fmtDate(c.pause_resume):'') : 'Not scheduled today';
+      var ov = getEffectiveQty(c.id, today);
+      var quota = deliverySession==='Morning'?(ov?ov.morning:(c.morning_quota||0)):(ov?ov.evening:(c.evening_quota||0));
+      html += '<div style="display:flex;align-items:center;gap:12px;padding:8px 16px;opacity:0.45;border-bottom:1px solid #eef2f0">';
+      html += '<div style="font-size:11px;color:var(--text-hint);min-width:20px">'+(c.delivery_sequence||'--')+'</div>';
+      html += '<div style="flex:1"><div style="font-size:13px;text-decoration:line-through;color:var(--text-muted)">'+esc(c.first_name||'')+' '+esc(c.last_name||'')+'</div>';
+      html += '<div style="font-size:11px;color:var(--text-hint)">'+esc(c.customer_code||'')+' &middot; '+quota+'L &middot; '+reason+'</div></div>';
+      html += '<span class="badge badge-'+(onPause?'Paused':'route')+'" style="font-size:10px">'+(onPause?'Paused':'Off today')+'</span>';
+      html += '</div>';
+    });
+    html += '</div>';
   }
 
   document.getElementById('content').innerHTML = html;
@@ -2573,15 +2656,17 @@ async function deductFromWallet(custId, amount) {
         toast(esc(c.first_name)+' -- Supply stopped (no grace days)', 'error');
       }
     } else if (newBal <= 0 && c.status === 'Grace') {
-      // Check if grace is exhausted -- count grace deliveries
-      const graceDeliveries = deliveries.filter(function(d) {
-        return String(d.customer_id)===String(custId) && d.status !== 'Not Delivered';
-      });
-      if (graceDeliveries.length >= (c.grace_days||3)) {
+      // Load full delivery history to accurately count grace days used
+      var allCustDeliveries = [];
+      try { allCustDeliveries = await db.get('gs_deliveries', 'customer_id=eq.'+custId+'&status=neq.Not+Delivered&order=delivery_date.asc'); } catch(e){ allCustDeliveries = deliveries.filter(function(d){ return String(d.customer_id)===String(custId) && d.status!=='Not Delivered'; }); }
+      if (allCustDeliveries.length >= (c.grace_days||3)) {
         await db.update('gs_customers', custId, { status: 'Stopped' });
         const ci = customers.findIndex(function(x) { return x.id===custId; });
         if (ci!==-1) customers[ci].status = 'Stopped';
-        toast(esc(c.first_name)+' -- Grace exhausted, supply stopped!', 'error');
+        toast(esc(c.first_name)+' -- Grace exhausted after '+(c.grace_days||3)+' days, supply stopped!', 'error');
+      } else {
+        var graceLeft = (c.grace_days||3) - allCustDeliveries.length;
+        toast(esc(c.first_name)+' -- Grace period: '+allCustDeliveries.length+'/'+(c.grace_days||3)+' days used, '+graceLeft+' remaining', 'info');
       }
     }
   } else {
@@ -3044,7 +3129,16 @@ function renderDailySummary() {
 
       // Expanded detail
       if (isExpanded && rd.length > 0) {
+        // Session breakdown
+        var mornDel = rd.filter(function(d){ return d.session==='Morning' && d.status!=='Not Delivered';});
+        var eveDel = rd.filter(function(d){ return d.session==='Evening' && d.status!=='Not Delivered';});
+        var mornL = mornDel.reduce(function(s,d){ return s+(d.qty_delivered||0);},0);
+        var eveL = eveDel.reduce(function(s,d){ return s+(d.qty_delivered||0);},0);
         html += '<div style="background:var(--bg);padding:0 18px 14px">';
+        html += '<div style="display:flex;gap:12px;padding:10px 0;flex-wrap:wrap">';
+        html += '<div style="background:#fff;border-radius:8px;padding:8px 14px;border:1px solid var(--border);font-size:12px"><strong>Morning:</strong> '+mornDel.length+' customers &middot; '+mornL.toFixed(1)+'L</div>';
+        html += '<div style="background:#fff;border-radius:8px;padding:8px 14px;border:1px solid var(--border);font-size:12px"><strong>Evening:</strong> '+eveDel.length+' customers &middot; '+eveL.toFixed(1)+'L</div>';
+        html += '</div>';
         html += '<div class="tbl-wrap"><table>';
         html += '<thead><tr><th>Customer</th><th>Session</th><th>Qty</th><th>Status</th><th>Deducted</th><th>Empties</th><th>Balance After</th></tr></thead><tbody>';
         // Group by customer
@@ -3916,17 +4010,22 @@ async function renderAlerts() {
     return c.status==='Active' && d >= 3 && d < 7;
   });
 
-  var totalAlerts = zeroBal.length + lowBal.length + graceCustomers.length + resumingToday.length + missedRoutes.length;
+  // Customers with no wallet record at all
+  var noWallet = customers.filter(function(c){
+    return c.status==='Active' && !wallets.find(function(w){ return String(w.customer_id)===String(c.id);});
+  });
+  var totalAlerts = zeroBal.length + lowBal.length + graceCustomers.length + resumingToday.length + missedRoutes.length + noWallet.length;
 
   var html = '';
 
   // Summary bar
-  html += '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:18px">';
+  html += '<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:18px">';
   html += dashStat('Zero Balance', zeroBal.length, zeroBal.length>0?'var(--danger)':'var(--text-hint)', 'needs top-up');
   html += dashStat('Low Balance', lowBal.length, lowBal.length>0?'var(--accent)':'var(--text-hint)', 'under 3 days');
   html += dashStat('Grace Period', graceCustomers.length, graceCustomers.length>0?'var(--accent)':'var(--text-hint)', 'at risk');
   html += dashStat('Resuming Today', resumingToday.length, resumingToday.length>0?'var(--brand)':'var(--text-hint)', 'include in route');
   html += dashStat('Missed Routes', missedRoutes.length, missedRoutes.length>0?'var(--danger)':'var(--text-hint)', 'no entries today');
+  html += dashStat('No Wallet', noWallet.length, noWallet.length>0?'var(--accent)':'var(--text-hint)', 'not set up');
   html += '</div>';
 
   if (totalAlerts === 0 && resumingTomorrow.length === 0) {
@@ -4032,6 +4131,21 @@ async function renderAlerts() {
     html += '</div>';
   }
 
+  // ── No Wallet Setup ──
+  if (noWallet.length > 0) {
+    html += '<div class="card" style="margin-bottom:14px;border-left:4px solid var(--accent)">';
+    html += '<div class="card-header"><div class="card-title" style="color:var(--accent)">⚙️ No Wallet Setup ('+noWallet.length+')</div><div style="font-size:12px;color:var(--text-muted)">These active customers have no wallet entry</div></div>';
+    html += '<div class="tbl-wrap"><table><thead><tr><th>Customer</th><th>Route</th><th>Quota</th><th>Action</th></tr></thead><tbody>';
+    noWallet.forEach(function(c){
+      var rt=routes.find(function(r){ return r.id===c.route_id;});
+      html += '<tr><td><div class="td-primary">'+esc(c.first_name)+' '+esc(c.last_name)+'</div><div class="td-sub">'+esc(c.customer_code||'')+'</div></td>';
+      html += '<td>'+(rt?'<span class="badge badge-route">'+esc(rt.name)+'</span>':'--')+'</td>';
+      html += '<td>'+(c.morning_quota||0)+'L+'+(c.evening_quota||0)+'L</td>';
+      html += '<td><button class="btn btn-primary btn-xs" onclick="openTopup('+c.id+')">Add Opening Balance</button></td></tr>';
+    });
+    html += '</tbody></table></div></div>';
+  }
+
   // ── Warning — Balance under 7 days ──
   if (warnBal.length > 0) {
     html += '<div class="card" style="margin-bottom:14px">';
@@ -4129,6 +4243,22 @@ async function renderBottleTracking() {
   }
   html += '</div>';
 
+  // Running balance card
+  if (allLogs.length > 0) {
+    var runOut = 0, runFRet = 0, runEmpFarm = 0, runEmpCust = 0;
+    // We need all deliveries for empties — use a simple total from logs
+    allLogs.forEach(function(b){ runOut+=(b.filled_out||0); runFRet+=(b.filled_returned||0); runEmpFarm+=(b.empty_collected||0); });
+    var farmBalance = runOut - runFRet - runEmpFarm;
+    html += '<div class="card" style="margin-bottom:16px">';
+    html += '<div class="card-header"><div class="card-title">Cumulative Bottle Balance</div><div style="font-size:12px;color:var(--text-muted)">All time running total</div></div>';
+    html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0;border-top:1px solid var(--border)">';
+    html += '<div style="padding:14px 16px;border-right:1px solid var(--border)"><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px">Total Sent Out</div><div style="font-size:22px;font-weight:700;color:var(--brand)">'+runOut+'</div><div style="font-size:11px;color:var(--text-hint)">filled bottles dispatched</div></div>';
+    html += '<div style="padding:14px 16px;border-right:1px solid var(--border)"><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px">Filled Returned</div><div style="font-size:22px;font-weight:700;color:var(--accent)">'+runFRet+'</div><div style="font-size:11px;color:var(--text-hint)">unsold/refused</div></div>';
+    html += '<div style="padding:14px 16px;border-right:1px solid var(--border)"><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px">Empties Back</div><div style="font-size:22px;font-weight:700;color:#0C447C">'+runEmpFarm+'</div><div style="font-size:11px;color:var(--text-hint)">from route logs</div></div>';
+    html += '<div style="padding:14px 16px"><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px">Net at Farm</div><div style="font-size:22px;font-weight:700;color:'+(farmBalance>=0?'var(--brand)':'var(--danger)')+'">'+farmBalance+'</div><div style="font-size:11px;color:var(--text-hint)">'+(farmBalance>=0?'bottles accounted':'bottles unaccounted')+'</div></div>';
+    html += '</div></div>';
+  }
+
   // Historical log — last 30 entries
   html += '<div class="card">';
   html += '<div class="card-header"><div class="card-title">Recent Bottle Log History</div><div style="font-size:12px;color:var(--text-muted)">Last 30 entries</div></div>';
@@ -4167,6 +4297,63 @@ function exportBottleCSV() {
     var blob = new Blob([lines.join(String.fromCharCode(13,10))],{type:'text/csv'});
     var a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='bottle-log.csv'; a.click();
   });
+}
+
+function printRouteList() {
+  var today = todayStr();
+  var dow = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date(today).getDay()];
+  var route = routes.find(function(r){ return String(r.id)===String(deliveryRoute); });
+  var rate = getRateForDate(today);
+  var routeCusts = customers
+    .filter(function(c){ return String(c.route_id)===String(deliveryRoute) && c.status!=='Stopped' && !isOnPause(c,today) && isDeliveryDay(c,today); })
+    .sort(function(a,b){ return (a.delivery_sequence||999)-(b.delivery_sequence||999); });
+
+  var rows = routeCusts.map(function(c, i) {
+    var ov = getEffectiveQty(c.id, today);
+    var mq = ov ? ov.morning : (c.morning_quota||0);
+    var eq = ov ? ov.evening : (c.evening_quota||0);
+    var w = getWallet(c.id);
+    var addr = [c.flat_no, c.building_name, c.street].filter(Boolean).join(', ');
+    return '<tr>'
+      +'<td style="text-align:center;color:#666">'+(i+1)+'</td>'
+      +'<td><strong>'+esc(c.first_name||'')+' '+esc(c.last_name||'')+'</strong><br><small style="color:#888">'+esc(c.customer_code||'')+'</small></td>'
+      +'<td style="font-size:11px;color:#666">'+esc(addr)+'</td>'
+      +'<td style="text-align:center">'+mq+'L</td>'
+      +'<td style="text-align:center">'+eq+'L</td>'
+      +'<td style="font-size:11px;color:#888">'+esc(c.delivery_notes||'')+'</td>'
+      +'<td style="width:80px;border:1px solid #ccc">&nbsp;</td>'
+      +'<td style="width:80px;border:1px solid #ccc">&nbsp;</td>'
+      +'</tr>';
+  }).join('');
+
+  var pausedRows = customers
+    .filter(function(c){ return String(c.route_id)===String(deliveryRoute) && isOnPause(c,today); })
+    .map(function(c){
+      return '<tr style="color:#aaa"><td colspan="6" style="padding:4px 8px;font-style:italic">'+esc(c.first_name)+' '+esc(c.last_name)+' ('+esc(c.customer_code||'')+') — Paused'+(c.pause_resume?' until '+fmtDate(c.pause_resume):'')+'</td><td colspan="2"></td></tr>';
+    }).join('');
+
+  var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Route List</title>'
+    +'<style>body{font-family:Arial,sans-serif;font-size:12px;padding:16px}h1{font-size:16px;margin:0 0 2px}h2{font-size:12px;color:#666;margin:0 0 12px;font-weight:normal}'
+    +'table{width:100%;border-collapse:collapse}th{background:#085041;color:#fff;padding:7px 8px;text-align:left;font-size:11px}'
+    +'td{padding:8px 8px;border-bottom:1px solid #eee}tr:nth-child(even){background:#f9f9f9}'
+    +'.footer{margin-top:16px;font-size:10px;color:#aaa;display:flex;justify-content:space-between}'
+    +'@media print{body{padding:0}}</style></head><body>'
+    +'<h1>🥛 '+esc(route?route.name:'Route')+' — Delivery List</h1>'
+    +'<h2>'+dow+', '+fmtDate(today)+(route&&route.milkman?' &middot; Milkman: '+esc(route.milkman):'')+'</h2>'
+    +'<table><thead><tr><th>#</th><th>Customer</th><th>Address</th><th>Morning</th><th>Evening</th><th>Notes</th><th>Delivered</th><th>Empties</th></tr></thead>'
+    +'<tbody>'+rows+(pausedRows?'<tr><td colspan="8" style="background:#f5f5f5;font-size:11px;color:#888;font-weight:700;padding:6px 8px">PAUSED CUSTOMERS (not delivering)</td></tr>'+pausedRows:'')+'</tbody>'
+    +'<tfoot><tr style="background:#f0faf5"><td colspan="3" style="font-weight:700;padding:8px">Total: '+routeCusts.length+' customers</td>'
+    +'<td style="font-weight:700">'+routeCusts.reduce(function(s,c){ var ov=getEffectiveQty(c.id,today); return s+(ov?ov.morning:(c.morning_quota||0));},0)+'L</td>'
+    +'<td style="font-weight:700">'+routeCusts.reduce(function(s,c){ var ov=getEffectiveQty(c.id,today); return s+(ov?ov.evening:(c.evening_quota||0));},0)+'L</td>'
+    +'<td colspan="3"></td></tr></tfoot>'
+    +'</table>'
+    +'<div class="footer"><span>GauRas Milk Distribution</span><span>Generated: '+fmtDate(today)+'</span></div>'
+    +'</body></html>';
+
+  var win = window.open('','_blank');
+  win.document.write(html);
+  win.document.close();
+  setTimeout(function(){ win.print(); }, 500);
 }
 
 // ── HELPERS ──
