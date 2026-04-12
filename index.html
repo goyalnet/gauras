@@ -251,10 +251,16 @@
   .login-screen { position:fixed;inset:0;background:var(--brand-dark);display:flex;align-items:center;justify-content:center;z-index:999;flex-direction:column;gap:0; }
   .login-card { background:#fff;border-radius:16px;padding:36px 32px;width:360px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,0.3); }
   .login-logo { text-align:center;margin-bottom:24px; }
-  .login-logo-icon { font-size:40px;margin-bottom:8px; }
+  .login-logo-img { width:90px;height:90px;object-fit:contain;margin-bottom:8px;border-radius:12px; }
+  .login-logo-icon { font-size:48px;margin-bottom:8px;line-height:1; }
   .login-logo-name { font-size:22px;font-weight:700;color:var(--brand-dark); }
   .login-logo-sub { font-size:12px;color:var(--text-muted);margin-top:2px; }
+  .login-logo-upload { font-size:11px;color:var(--text-hint);margin-top:8px;cursor:pointer;text-decoration:underline; }
+  .login-logo-upload:hover { color:var(--brand); }
   .login-error { background:var(--danger-light);color:var(--danger);padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:16px;display:none; }
+  .remember-row { display:flex;align-items:center;gap:8px;margin-top:4px; }
+  .remember-row input[type=checkbox] { width:16px;height:16px;cursor:pointer;accent-color:var(--brand); }
+  .remember-row label { font-size:13px;color:var(--text-muted);cursor:pointer; }
   /* CONTROL PANEL */
   .cp-section { background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);margin-bottom:16px; }
   .cp-section-title { padding:13px 18px;border-bottom:1px solid var(--border);font-weight:700;font-size:14px; }
@@ -286,8 +292,8 @@
 <div class="app">
   <aside class="sidebar">
     <div class="sidebar-logo">
-      <div class="logo-name">🥛 GauRas</div>
-      <div class="logo-sub">Milk Distribution</div>
+      <div id="sidebar-farm-name" class="logo-name" style="font-size:14px;font-weight:700;color:#fff">My Farm</div>
+      <div class="logo-sub" id="sidebar-farm-sub" style="font-size:10px;opacity:0.5">GauRas</div>
     </div>
     <div class="nav-group">
       <div class="nav-label">Main</div>
@@ -327,13 +333,26 @@
 <div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
 
 <!-- LOGIN SCREEN -->
+<input type="file" id="logo-file-input" accept="image/*" style="display:none" onchange="handleLogoUpload(this)">
 <div class="login-screen" id="login-screen">
   <div class="login-card">
-    <div class="login-logo">
-      <div class="login-logo-icon">🥛</div>
-      <div class="login-logo-name">GauRas</div>
-      <div class="login-logo-sub">Milk Distribution Management</div>
+    <!-- Farm Brand -->
+    <div style="text-align:center;margin-bottom:16px">
+      <div style="font-size:20px;font-weight:700;color:var(--brand-dark)" id="login-brand-name">My Farm</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-top:2px" id="login-brand-sub"></div>
+      <div id="login-logo-display" style="margin-top:10px">
+        <div id="login-logo-emoji" style="font-size:40px">🏡</div>
+      </div>
+      <div class="login-logo-upload" onclick="document.getElementById('logo-file-input').click()" style="margin-top:6px">📷 Upload Farm Logo</div>
     </div>
+    <!-- GauRas Brand -->
+    <div style="border-top:1px solid var(--border);padding-top:14px;text-align:center;margin-bottom:16px">
+      <div style="font-size:15px;font-weight:700;color:var(--brand)">🥛 GauRas</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:2px">Milk Distribution Management</div>
+    </div>
+    <!-- Login Form -->
+    <div style="border-top:1px solid var(--border);padding-top:14px">
+    <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:14px">Login</div>
     <div class="login-error" id="login-error">Invalid username or password</div>
     <div class="form-1">
       <div class="fg">
@@ -344,10 +363,15 @@
         <label class="flabel">Password</label>
         <input class="fcontrol" id="login-pass" type="password" placeholder="Enter password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
       </div>
-      <button class="btn btn-primary" style="width:100%;padding:11px;font-size:15px;margin-top:8px" onclick="doLogin()" id="login-btn">Login</button>
+      <div class="remember-row">
+        <input type="checkbox" id="remember-me" checked>
+        <label for="remember-me">Remember me on this device</label>
+      </div>
+      <button class="btn btn-primary" style="width:100%;padding:11px;font-size:15px;margin-top:12px" onclick="doLogin()" id="login-btn">Login</button>
     </div>
+    </div><!-- end login form -->
   </div>
-  <div style="color:rgba(255,255,255,0.35);font-size:11px;margin-top:16px">GauRas &copy; Girdhaam</div>
+  <div style="color:rgba(255,255,255,0.35);font-size:11px;margin-top:16px;text-align:center" id="login-footer">GauRas &copy; Girdhaam &middot; Milk Distribution Management</div>
 </div>
 
 <div class="toasts" id="toasts"></div>
@@ -779,6 +803,64 @@ async function refreshAll() {
   } catch(e) { toast('Refresh failed: '+e.message, 'error'); }
   finally { if (btn) { btn.textContent = '&#8635; Refresh'; btn.disabled = false; } }
 }
+
+// ── BRAND LOGO ──
+function triggerLogoUpload() {
+  document.getElementById('logo-file-input').click();
+}
+
+function handleLogoUpload(input) {
+  var file = input.files[0];
+  if (!file) return;
+  if (!file.type.startsWith('image/')) return toast('Please select an image file','error');
+  if (file.size > 500000) return toast('Image too large — please use an image under 500KB','error');
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var dataUrl = e.target.result;
+    // Save to localStorage
+    try { localStorage.setItem('gauras_logo', dataUrl); } catch(err) { toast('Could not save logo','error'); return; }
+    applyStoredLogo();
+    toast('Logo uploaded and saved!','success');
+  };
+  reader.readAsDataURL(file);
+}
+
+function applyStoredLogo() {
+  try {
+    var logo = localStorage.getItem('gauras_logo');
+    var displayEl = document.getElementById('login-logo-display');
+    var sidebarLogoEl = document.querySelector('.sidebar-logo');
+    if (logo && displayEl) {
+      displayEl.innerHTML = '<img src="'+logo+'" class="login-logo-img" alt="Brand Logo"><br>';
+    }
+    if (logo && sidebarLogoEl) {
+      var imgEl = sidebarLogoEl.querySelector('.logo-img');
+      if (!imgEl) {
+        imgEl = document.createElement('img');
+        imgEl.className = 'logo-img';
+        imgEl.style.cssText = 'width:36px;height:36px;object-fit:contain;border-radius:6px;margin-right:8px;vertical-align:middle';
+        sidebarLogoEl.insertBefore(imgEl, sidebarLogoEl.firstChild);
+      }
+      imgEl.src = logo;
+    }
+    // Update farm brand name
+    var brandName = localStorage.getItem('gauras_brand_name') || 'My Farm';
+    var brandSub = localStorage.getItem('gauras_brand_sub') || '';
+    var loginNameEl = document.getElementById('login-brand-name');
+    if (loginNameEl) loginNameEl.textContent = brandName;
+    var loginSubEl = document.getElementById('login-brand-sub');
+    if (loginSubEl) loginSubEl.textContent = brandSub || '';
+    var sidebarName = document.getElementById('sidebar-farm-name');
+    if (sidebarName) sidebarName.textContent = brandName;
+    var sidebarSub = document.getElementById('sidebar-farm-sub');
+    if (sidebarSub) sidebarSub.textContent = (brandSub ? brandSub+' · ' : '')+'GauRas';
+  } catch(e){}
+}
+
+// Load logo on page load
+document.addEventListener('DOMContentLoaded', function() {
+  applyStoredLogo();
+});
 
 function toggleSidebar() {
   var sb = document.querySelector('.sidebar');
@@ -4560,8 +4642,13 @@ async function doLogin() {
     } catch(e){}
     var perms = Object.assign({}, DEFAULT_PERMISSIONS[user.role]||{}, dbPerms);
     _session = { user: user, role: user.role, routeId: user.route_id, permissions: perms };
-    // Save session
-    try { localStorage.setItem('gauras_session', JSON.stringify({ userId: user.id, role: user.role, routeId: user.route_id, fullName: user.full_name })); } catch(e){}
+    // Save session if Remember Me checked
+    var rememberMe = document.getElementById('remember-me');
+    if (!rememberMe || rememberMe.checked) {
+      try { localStorage.setItem('gauras_session', JSON.stringify({ userId: user.id, role: user.role, routeId: user.route_id, fullName: user.full_name })); } catch(e){}
+    } else {
+      try { sessionStorage.setItem('gauras_session', JSON.stringify({ userId: user.id, role: user.role, routeId: user.route_id, fullName: user.full_name })); } catch(e){}
+    }
     // Update last login
     try { await db.update('gs_users', user.id, { last_login: new Date().toISOString() }); } catch(e){}
     onLoginSuccess();
@@ -4623,7 +4710,7 @@ function doLogout() {
 // Check for existing session on load
 function checkExistingSession() {
   try {
-    var saved = localStorage.getItem('gauras_session');
+    var saved = localStorage.getItem('gauras_session') || sessionStorage.getItem('gauras_session');
     if (saved) {
       var s = JSON.parse(saved);
       // Validate and restore — reload user from DB
@@ -4722,6 +4809,22 @@ function renderCPContent() {
   html += '<div style="padding:12px 16px;border-top:1px solid var(--border);display:flex;justify-content:flex-end">';
   html += '<button class="btn btn-primary" onclick="saveAllPerms()">Save Permissions</button>';
   html += '</div></div>';
+
+  // Brand Settings
+  var storedName = "'; try { storedName = localStorage.getItem('gauras_brand_name')||'GauRas'; } catch(e){}; var n='";
+  html += '<div class="cp-section" style="margin-bottom:16px">';
+  html += '<div class="cp-section-title">Your Farm Brand Settings</div>';
+  html += '<div style="padding:12px 16px;background:var(--brand-light);border-bottom:1px solid var(--border);font-size:12px;color:var(--brand-dark)">These details identify your farm in the app. The GauRas product identity is always shown separately.</div>';
+  html += '<div style="padding:16px;display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">';
+  html += '<div><label class="flabel" style="display:block;margin-bottom:5px">Farm / Dairy Name</label>';
+  html += '<input class="fcontrol" id="cp-brand-name" style="min-width:200px" placeholder="e.g. Girdhaam Dairy" value="'+esc(localStorage.getItem('gauras_brand_name')||'')+'"></div>';
+  html += '<div><label class="flabel" style="display:block;margin-bottom:5px">Tagline (optional)</label>';
+  html += '<input class="fcontrol" id="cp-brand-sub" style="min-width:250px" placeholder="e.g. Fresh Milk Every Morning" value="'+esc(localStorage.getItem('gauras_brand_sub')||'')+'"></div>';
+  html += '<div><button class="btn btn-primary" onclick="saveBrandSettings()">Save Brand</button></div>';
+  html += '<div><label class="flabel" style="display:block;margin-bottom:5px">Logo</label>';
+  html += '<button class="btn btn-outline" onclick="triggerLogoUpload()">Upload Logo</button>';
+  html += (localStorage.getItem('gauras_logo')?' <button class="btn btn-danger btn-sm" onclick="removeLogo()">Remove Logo</button>':'');
+  html += '</div></div></div>';
 
   // User Management
   html += '<div class="cp-section">';
@@ -4825,6 +4928,29 @@ function showUserModal(title, username, fullName, role, routeId, isActive) {
     +'</div></div>';
   document.body.insertAdjacentHTML('beforeend', html);
   setTimeout(function(){ var el=document.getElementById('um-user'); if(el&&!el.disabled) el.focus(); },150);
+}
+
+function saveBrandSettings() {
+  var name = (document.getElementById('cp-brand-name').value||'').trim() || 'My Farm';
+  var sub = (document.getElementById('cp-brand-sub').value||'').trim();
+  try {
+    localStorage.setItem('gauras_brand_name', name);
+    localStorage.setItem('gauras_brand_sub', sub);
+    applyStoredLogo();
+    toast('Brand settings saved!','success');
+  } catch(e) { toast('Error saving brand settings','error'); }
+}
+
+function removeLogo() {
+  try {
+    localStorage.removeItem('gauras_logo');
+    var displayEl = document.getElementById('login-logo-display');
+    if (displayEl) displayEl.innerHTML = '<div class="login-logo-icon" id="login-logo-emoji">🥛</div>';
+    var imgEl = document.querySelector('.sidebar-logo .logo-img');
+    if (imgEl) imgEl.remove();
+    toast('Logo removed','success');
+    renderCPContent();
+  } catch(e){}
 }
 
 function closeUserModal() {
