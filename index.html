@@ -247,6 +247,28 @@
   .days-pill.zero { background: var(--danger-light); color: var(--danger); }
   .wlt-search { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
 
+  /* LOGIN */
+  .login-screen { position:fixed;inset:0;background:var(--brand-dark);display:flex;align-items:center;justify-content:center;z-index:999;flex-direction:column;gap:0; }
+  .login-card { background:#fff;border-radius:16px;padding:36px 32px;width:360px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,0.3); }
+  .login-logo { text-align:center;margin-bottom:24px; }
+  .login-logo-icon { font-size:40px;margin-bottom:8px; }
+  .login-logo-name { font-size:22px;font-weight:700;color:var(--brand-dark); }
+  .login-logo-sub { font-size:12px;color:var(--text-muted);margin-top:2px; }
+  .login-error { background:var(--danger-light);color:var(--danger);padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:16px;display:none; }
+  /* CONTROL PANEL */
+  .cp-section { background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);margin-bottom:16px; }
+  .cp-section-title { padding:13px 18px;border-bottom:1px solid var(--border);font-weight:700;font-size:14px; }
+  .perm-grid { display:grid;grid-template-columns:180px repeat(4,1fr);border-bottom:1px solid var(--border); }
+  .perm-header { padding:8px 12px;font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.4px;text-align:center;border-right:1px solid var(--border); }
+  .perm-header:first-child { text-align:left; }
+  .perm-row { display:contents; }
+  .perm-label { padding:10px 12px;font-size:13px;border-right:1px solid var(--border);border-top:1px solid var(--border);color:var(--text); }
+  .perm-cell { padding:8px;border-right:1px solid var(--border);border-top:1px solid var(--border);display:flex;align-items:center;justify-content:center; }
+  .perm-toggle { width:36px;height:20px;border-radius:10px;border:none;cursor:pointer;position:relative;transition:background 0.2s;flex-shrink:0; }
+  .perm-toggle.on { background:var(--brand); }
+  .perm-toggle.off { background:var(--border); }
+  .perm-toggle.locked { background:var(--brand);cursor:not-allowed;opacity:0.7; }
+
   @media (max-width: 768px) {
     .sidebar { display: none; position: fixed; top: 0; left: 0; height: 100vh; z-index: 200; width: var(--sidebar-w); }
     .sidebar.open { display: flex; }
@@ -287,6 +309,7 @@
     <div class="nav-group">
       <div class="nav-label">Configuration</div>
       <div class="nav-item" onclick="go('masters')"><span>⚙️</span> Masters</div>
+      <div class="nav-item" id="nav-control" onclick="go('control')" style="display:none"><span>🔐</span> Control Panel</div>
     </div>
   </aside>
   <div class="main">
@@ -295,12 +318,37 @@
       <div class="page-title" id="page-title">Customers</div>
       <div id="last-sync" style="font-size:11px;color:var(--text-hint)"></div>
       <button onclick="refreshAll()" title="Refresh data" style="background:none;border:1px solid var(--border);border-radius:7px;padding:5px 10px;cursor:pointer;font-size:13px;color:var(--text-muted);font-family:inherit" id="refresh-btn">&#8635; Refresh</button>
-      <span class="role-badge">Admin</span>
+      <span class="role-badge" id="role-badge">Admin</span>
+      <button onclick="doLogout()" style="background:none;border:1px solid var(--border);border-radius:7px;padding:5px 10px;cursor:pointer;font-size:12px;color:var(--text-muted);font-family:inherit">Logout</button>
     </header>
     <div class="content" id="content"></div>
   </div>
 </div>
 <div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+<!-- LOGIN SCREEN -->
+<div class="login-screen" id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="login-logo-icon">🥛</div>
+      <div class="login-logo-name">GauRas</div>
+      <div class="login-logo-sub">Milk Distribution Management</div>
+    </div>
+    <div class="login-error" id="login-error">Invalid username or password</div>
+    <div class="form-1">
+      <div class="fg">
+        <label class="flabel">Username</label>
+        <input class="fcontrol" id="login-user" placeholder="Enter username" autocomplete="username" onkeydown="if(event.key==='Enter')document.getElementById('login-pass').focus()">
+      </div>
+      <div class="fg">
+        <label class="flabel">Password</label>
+        <input class="fcontrol" id="login-pass" type="password" placeholder="Enter password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+      </div>
+      <button class="btn btn-primary" style="width:100%;padding:11px;font-size:15px;margin-top:8px" onclick="doLogin()" id="login-btn">Login</button>
+    </div>
+  </div>
+  <div style="color:rgba(255,255,255,0.35);font-size:11px;margin-top:16px">GauRas &copy; Girdhaam</div>
+</div>
 
 <div class="toasts" id="toasts"></div>
 
@@ -668,8 +716,23 @@ async function boot() {
   try { deliveries  = await db.get('gs_deliveries', 'delivery_date=eq.'+todayStr()+'&order=created_at.asc'); } catch(e) { deliveries = []; }
   try { bottleLogs = await db.get('gs_bottle_log', 'log_date=eq.'+todayStr()); } catch(e) { bottleLogs = []; }
   try { topups     = await db.get('gs_topups',   'order=topup_date.desc'); } catch(e) { topups = []; }
-  go('dashboard');
+  // Navigate to first allowed page
+  var firstPage = 'dashboard';
+  if (!can('page_dashboard')) {
+    if (can('page_delivery')) firstPage = 'delivery';
+    else if (can('page_customers')) firstPage = 'customers';
+    else if (can('page_wallet')) firstPage = 'wallet';
+  }
+  go(firstPage);
 }
+
+// Init — check session or show login
+window.addEventListener('DOMContentLoaded', function() {
+  if (!checkExistingSession()) {
+    // Show login, no session found
+    setTimeout(function(){ document.getElementById('login-pass') && document.getElementById('login-user').focus(); }, 100);
+  }
+});
 
 let _currentPage = 'customers';
 let _autoRefreshTimer = null;
@@ -737,7 +800,7 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 });
 
-const PAGE_TITLES = { customers:'Customers', routes:'Routes', masters:'Masters', dashboard:'Dashboard', delivery:'Daily Delivery', wallet:'Wallet & Payments', bottles:'Bottle Tracking', reports:'Reports', alerts:'Alerts' };
+const PAGE_TITLES = { customers:'Customers', routes:'Routes', masters:'Masters', dashboard:'Dashboard', delivery:'Daily Delivery', wallet:'Wallet & Payments', bottles:'Bottle Tracking', reports:'Reports', alerts:'Alerts', control:'Control Panel' };
 
 function go(page) {
   _currentPage = page;
@@ -754,6 +817,7 @@ function go(page) {
   else if (page === 'delivery') renderDelivery();
   else if (page === 'alerts') renderAlerts();
   else if (page === 'bottles') renderBottleTracking();
+  else if (page === 'control') renderControlPanel();
   else if (page === 'reports') { if(!window._reportTab) window._reportTab='summary'; renderReports(); if(window._reportTab==='summary') loadSummaryData(); else if(window._reportTab==='route') renderRouteStatement(); else loadReportData(); }
   else if (page === 'dashboard') { renderDashboard(); }
   else document.getElementById('content').innerHTML = '<div class="empty"><div class="empty-icon">🚧</div><p>Coming in a future phase.</p></div>';
@@ -4398,6 +4462,421 @@ function printRouteList() {
   win.document.write(html);
   win.document.close();
   setTimeout(function(){ win.print(); }, 500);
+}
+
+// ══════════════════════════════════════
+// AUTH + CONTROL PANEL
+// ══════════════════════════════════════
+
+// Current session
+var _session = null; // { user, role, routeId, permissions }
+var _users = [];
+var _permissions = {};
+
+// Simple MD5-like hash (using btoa for simplicity — not cryptographic)
+function hashPassword(pw) {
+  // Simple hash: base64 of reversed password + salt
+  // For production use a proper hash, but this prevents plain text storage
+  var salted = 'gauras_' + pw.split('').reverse().join('') + '_milk';
+  return btoa(salted).replace(/=/g,'');
+}
+
+function md5Hash(pw) {
+  // Use the stored hash format from SQL (ef92b778bafe771207eba55a6710c4a5 = admin123)
+  // We'll use our own hash for new users
+  return hashPassword(pw);
+}
+
+// Default permissions per role
+var DEFAULT_PERMISSIONS = {
+  Admin: {
+    page_dashboard:true, page_customers:true, page_routes:true, page_delivery:true,
+    page_wallet:true, page_bottles:true, page_reports:true, page_alerts:true,
+    page_masters:true, page_control:true,
+    feat_add_customer:true, feat_edit_customer:true, feat_delete_customer:true,
+    feat_topup:true, feat_edit_topup:true, feat_delete_topup:true,
+    feat_set_rate:true, feat_add_route:true, feat_submit_delivery:true,
+    feat_export:true, feat_print:true, feat_arrange_sequence:true
+  },
+  Manager: {
+    page_dashboard:true, page_customers:true, page_routes:true, page_delivery:true,
+    page_wallet:true, page_bottles:true, page_reports:true, page_alerts:true,
+    page_masters:false, page_control:false,
+    feat_add_customer:true, feat_edit_customer:true, feat_delete_customer:false,
+    feat_topup:true, feat_edit_topup:true, feat_delete_topup:false,
+    feat_set_rate:false, feat_add_route:true, feat_submit_delivery:true,
+    feat_export:true, feat_print:true, feat_arrange_sequence:true
+  },
+  Milkman: {
+    page_dashboard:false, page_customers:false, page_routes:false, page_delivery:true,
+    page_wallet:false, page_bottles:true, page_reports:false, page_alerts:false,
+    page_masters:false, page_control:false,
+    feat_add_customer:false, feat_edit_customer:false, feat_delete_customer:false,
+    feat_topup:false, feat_edit_topup:false, feat_delete_topup:false,
+    feat_set_rate:false, feat_add_route:false, feat_submit_delivery:true,
+    feat_export:false, feat_print:true, feat_arrange_sequence:false
+  },
+  Customer: {
+    page_dashboard:false, page_customers:false, page_routes:false, page_delivery:false,
+    page_wallet:false, page_bottles:false, page_reports:false, page_alerts:false,
+    page_masters:false, page_control:false,
+    feat_add_customer:false, feat_edit_customer:false, feat_delete_customer:false,
+    feat_topup:false, feat_edit_topup:false, feat_delete_topup:false,
+    feat_set_rate:false, feat_add_route:false, feat_submit_delivery:false,
+    feat_export:false, feat_print:false, feat_arrange_sequence:false
+  }
+};
+
+function can(permKey) {
+  if (!_session) return false;
+  if (_session.role === 'Admin') return true;
+  var perms = _session.permissions || DEFAULT_PERMISSIONS[_session.role] || {};
+  return perms[permKey] !== false;
+}
+
+async function doLogin() {
+  var username = (document.getElementById('login-user').value||'').trim();
+  var password = (document.getElementById('login-pass').value||'').trim();
+  var errEl = document.getElementById('login-error');
+  var btn = document.getElementById('login-btn');
+  if (!username || !password) { errEl.style.display='block'; errEl.textContent='Please enter username and password'; return; }
+  errEl.style.display='none';
+  btn.textContent='Logging in...'; btn.disabled=true;
+  try {
+    // Fetch user from DB
+    var users = await db.get('gs_users','username=eq.'+encodeURIComponent(username)+'&is_active=eq.true');
+    if (!users || users.length===0) { throw new Error('Invalid username or password'); }
+    var user = users[0];
+    // Check password — support both MD5 (legacy admin) and our hash
+    var pwHash = hashPassword(password);
+    var md5admin = 'ef92b778bafe771207eba55a6710c4a5'; // md5 of 'admin123'
+    var validPw = (user.password_hash === pwHash) || (user.username==='admin' && password==='admin123' && user.password_hash===md5admin);
+    if (!validPw) throw new Error('Invalid username or password');
+    // Load permissions for this role
+    var dbPerms = {};
+    try {
+      var permRows = await db.get('gs_permissions','role=eq.'+encodeURIComponent(user.role));
+      permRows.forEach(function(p){ dbPerms[p.permission_key] = p.allowed; });
+    } catch(e){}
+    var perms = Object.assign({}, DEFAULT_PERMISSIONS[user.role]||{}, dbPerms);
+    _session = { user: user, role: user.role, routeId: user.route_id, permissions: perms };
+    // Save session
+    try { localStorage.setItem('gauras_session', JSON.stringify({ userId: user.id, role: user.role, routeId: user.route_id, fullName: user.full_name })); } catch(e){}
+    // Update last login
+    try { await db.update('gs_users', user.id, { last_login: new Date().toISOString() }); } catch(e){}
+    onLoginSuccess();
+  } catch(e) {
+    errEl.style.display='block'; errEl.textContent = e.message || 'Login failed';
+  } finally { btn.textContent='Login'; btn.disabled=false; }
+}
+
+function onLoginSuccess() {
+  // Hide login screen
+  document.getElementById('login-screen').style.display='none';
+  // Update role badge
+  var badge = document.getElementById('role-badge');
+  if (badge) badge.textContent = (_session.user.full_name||_session.role)+' ('+_session.role+')';
+  // Show/hide nav items based on permissions
+  applyNavPermissions();
+  // If milkman, pre-select their route
+  if (_session.role==='Milkman' && _session.routeId) {
+    deliveryRoute = _session.routeId;
+  }
+  // Show control panel nav only for Admin
+  var cpNav = document.getElementById('nav-control');
+  if (cpNav) cpNav.style.display = _session.role==='Admin' ? 'flex' : 'none';
+  // Boot and go to first allowed page
+  boot();
+}
+
+function applyNavPermissions() {
+  var pageMap = {
+    'dashboard': 'page_dashboard', 'customers': 'page_customers', 'routes': 'page_routes',
+    'delivery': 'page_delivery', 'wallet': 'page_wallet', 'bottles': 'page_bottles',
+    'reports': 'page_reports', 'alerts': 'page_alerts', 'masters': 'page_masters'
+  };
+  document.querySelectorAll('.nav-item').forEach(function(el) {
+    var onclick = el.getAttribute('onclick') || '';
+    var match = onclick.match(/go\('([^']+)'\)/);
+    if (match) {
+      var page = match[1];
+      var permKey = pageMap[page];
+      if (permKey && !can(permKey)) {
+        el.style.display = 'none';
+      } else {
+        el.style.display = 'flex';
+      }
+    }
+  });
+}
+
+function doLogout() {
+  if (!confirm('Are you sure you want to logout?')) return;
+  _session = null;
+  try { localStorage.removeItem('gauras_session'); } catch(e){}
+  document.getElementById('login-screen').style.display='flex';
+  document.getElementById('login-user').value='';
+  document.getElementById('login-pass').value='';
+  document.getElementById('content').innerHTML='';
+}
+
+// Check for existing session on load
+function checkExistingSession() {
+  try {
+    var saved = localStorage.getItem('gauras_session');
+    if (saved) {
+      var s = JSON.parse(saved);
+      // Validate and restore — reload user from DB
+      db.get('gs_users','id=eq.'+s.userId+'&is_active=eq.true').then(function(users){
+        if (users && users.length>0) {
+          var user = users[0];
+          var perms = Object.assign({}, DEFAULT_PERMISSIONS[user.role]||{});
+          db.get('gs_permissions','role=eq.'+encodeURIComponent(user.role)).then(function(permRows){
+            permRows.forEach(function(p){ perms[p.permission_key]=p.allowed; });
+            _session = { user:user, role:user.role, routeId:user.route_id, permissions:perms };
+            onLoginSuccess();
+          }).catch(function(){
+            _session = { user:user, role:user.role, routeId:user.route_id, permissions:perms };
+            onLoginSuccess();
+          });
+        } else {
+          // Session expired
+          localStorage.removeItem('gauras_session');
+        }
+      }).catch(function(){ localStorage.removeItem('gauras_session'); });
+      return true;
+    }
+  } catch(e){}
+  return false;
+}
+
+// ── CONTROL PANEL ──
+var _cpUsers = [];
+var _cpPerms = {};
+
+async function renderControlPanel() {
+  var body = document.getElementById('content');
+  body.innerHTML = '<div style="padding:20px;color:var(--text-muted)">Loading...</div>';
+  try { _cpUsers = await db.get('gs_users','order=role.asc,username.asc'); } catch(e){ _cpUsers=[]; }
+  try {
+    var rows = await db.get('gs_permissions','order=role.asc');
+    _cpPerms = {};
+    rows.forEach(function(r){ if(!_cpPerms[r.role]) _cpPerms[r.role]={}; _cpPerms[r.role][r.permission_key]=r.allowed; });
+  } catch(e){}
+  renderCPContent();
+}
+
+function renderCPContent() {
+  var roles = ['Admin','Manager','Milkman','Customer'];
+  var pages = [
+    {key:'page_dashboard',label:'Dashboard'},{key:'page_customers',label:'Customers'},
+    {key:'page_routes',label:'Routes'},{key:'page_delivery',label:'Daily Delivery'},
+    {key:'page_wallet',label:'Wallet & Payments'},{key:'page_bottles',label:'Bottle Tracking'},
+    {key:'page_reports',label:'Reports'},{key:'page_alerts',label:'Alerts'},
+    {key:'page_masters',label:'Masters'},{key:'page_control',label:'Control Panel'}
+  ];
+  var features = [
+    {key:'feat_add_customer',label:'Add Customer'},{key:'feat_edit_customer',label:'Edit Customer'},
+    {key:'feat_delete_customer',label:'Delete Customer'},{key:'feat_topup',label:'Record Top-up'},
+    {key:'feat_edit_topup',label:'Edit Top-up'},{key:'feat_delete_topup',label:'Delete Top-up'},
+    {key:'feat_set_rate',label:'Set Rate'},{key:'feat_add_route',label:'Add/Edit Route'},
+    {key:'feat_submit_delivery',label:'Submit Delivery'},{key:'feat_export',label:'Export Reports'},
+    {key:'feat_print',label:'Print List'},{key:'feat_arrange_sequence',label:'Arrange Sequence'}
+  ];
+
+  function getPermValue(role, key) {
+    if (_cpPerms[role] && _cpPerms[role][key] !== undefined) return _cpPerms[role][key];
+    return (DEFAULT_PERMISSIONS[role]||{})[key] !== false;
+  }
+
+  function permToggle(role, key) {
+    var locked = role==='Admin';
+    var val = locked ? true : getPermValue(role, key);
+    var cls = locked ? 'locked' : (val?'on':'off');
+    var onclickAttr = locked ? '' : ('data-role="'+role+'" data-key="'+key+'" onclick="togglePermBtn(this)"');
+    return '<div class="perm-cell"><button class="perm-toggle '+cls+'" '+onclickAttr+' title="'+(locked?'Admin always has full access':val?'Click to revoke':'Click to allow')+'"></button></div>';
+  }
+
+  function permSection(title, items) {
+    var html = '<div style="padding:10px 12px;background:var(--bg);font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;border-top:1px solid var(--border)">'+title+'</div>';
+    items.forEach(function(item){
+      html += '<div class="perm-row">';
+      html += '<div class="perm-label">'+item.label+'</div>';
+      roles.forEach(function(role){ html += permToggle(role, item.key); });
+      html += '</div>';
+    });
+    return html;
+  }
+
+  var html = '';
+
+  // Permission Matrix
+  html += '<div class="cp-section">';
+  html += '<div class="cp-section-title">Permission Matrix <span style="font-size:12px;color:var(--text-muted);font-weight:400">— click toggles to change access per role</span></div>';
+  html += '<div class="perm-grid">';
+  html += '<div class="perm-header">Permission</div>';
+  roles.forEach(function(r){ html += '<div class="perm-header">'+r+'</div>'; });
+  html += '</div>';
+  html += permSection('Pages', pages);
+  html += permSection('Features', features);
+  html += '<div style="padding:12px 16px;border-top:1px solid var(--border);display:flex;justify-content:flex-end">';
+  html += '<button class="btn btn-primary" onclick="saveAllPerms()">Save Permissions</button>';
+  html += '</div></div>';
+
+  // User Management
+  html += '<div class="cp-section">';
+  html += '<div class="cp-section-title" style="display:flex;align-items:center;justify-content:space-between">User Management <button class="btn btn-primary btn-sm" onclick="openAddUser()">+ Add User</button></div>';
+  html += '<div class="tbl-wrap"><table><thead><tr><th>Username</th><th>Full Name</th><th>Role</th><th>Route</th><th>Last Login</th><th>Status</th><th>Actions</th></tr></thead><tbody>';
+  _cpUsers.forEach(function(u){
+    var rt = routes.find(function(r){ return r.id===u.route_id;});
+    html += '<tr>'
+      +'<td><span class="td-code">'+esc(u.username)+'</span></td>'
+      +'<td>'+esc(u.full_name||'--')+'</td>'
+      +'<td><span class="badge badge-'+(u.role==='Admin'?'Active':u.role==='Manager'?'Grace':'Paused')+'">'+esc(u.role)+'</span></td>'
+      +'<td>'+(rt?'<span class="badge badge-route">'+esc(rt.name)+'</span>':'<span style="color:var(--text-hint)">All routes</span>')+'</td>'
+      +'<td style="font-size:12px;color:var(--text-muted)">'+(u.last_login?fmtDate(u.last_login):'Never')+'</td>'
+      +'<td><span class="badge badge-'+(u.is_active?'Active':'Stopped')+'">'+(u.is_active?'Active':'Inactive')+'</span></td>'
+      +'<td><div class="acts">'
+      +'<button class="btn btn-outline btn-xs" onclick="openEditUser('+u.id+')">Edit</button>'
+      +(u.username!=='admin'?'<button class="btn btn-danger btn-xs" onclick="toggleUserActive('+u.id+','+(!u.is_active)+')">'+(u.is_active?'Deactivate':'Activate')+'</button>':'')
+      +'<button class="btn btn-outline btn-xs" onclick="resetPassword('+u.id+')">Reset PW</button>'
+      +'</div></td>'
+      +'</tr>';
+  });
+  html += '</tbody></table></div></div>';
+
+  document.getElementById('content').innerHTML = html;
+}
+
+function togglePermBtn(btn) {
+  var role = btn.getAttribute('data-role');
+  var key = btn.getAttribute('data-key');
+  togglePerm(role, key);
+}
+
+async function togglePerm(role, key) {
+  var current = getPermFromGrid(role, key);
+  // Update in memory
+  if (!_cpPerms[role]) _cpPerms[role] = {};
+  _cpPerms[role][key] = !current;
+  renderCPContent();
+}
+
+function getPermFromGrid(role, key) {
+  if (_cpPerms[role] && _cpPerms[role][key] !== undefined) return _cpPerms[role][key];
+  return (DEFAULT_PERMISSIONS[role]||{})[key] !== false;
+}
+
+async function saveAllPerms() {
+  var roles = ['Manager','Milkman','Customer'];
+  try {
+    for (var ri=0; ri<roles.length; ri++) {
+      var role = roles[ri];
+      var perms = _cpPerms[role] || {};
+      var keys = Object.keys(Object.assign({}, DEFAULT_PERMISSIONS[role]||{}, perms));
+      for (var ki=0; ki<keys.length; ki++) {
+        var key = keys[ki];
+        var val = perms[key]!==undefined ? perms[key] : (DEFAULT_PERMISSIONS[role]||{})[key];
+        // Upsert permission
+        var existing = await db.get('gs_permissions','role=eq.'+encodeURIComponent(role)+'&permission_key=eq.'+encodeURIComponent(key));
+        if (existing && existing.length>0) {
+          await db.update('gs_permissions', existing[0].id, { allowed: val });
+        } else {
+          await db.insert('gs_permissions', { role:role, permission_key:key, allowed:val });
+        }
+      }
+    }
+    toast('Permissions saved successfully', 'success');
+    // Reload current session permissions if affected
+    if (_session && _cpPerms[_session.role]) {
+      _session.permissions = Object.assign({}, DEFAULT_PERMISSIONS[_session.role]||{}, _cpPerms[_session.role]);
+      applyNavPermissions();
+    }
+  } catch(e) { toast('Error saving permissions: '+e.message, 'error'); }
+}
+
+// User add/edit modal
+let _editUserId = null;
+function openAddUser() {
+  _editUserId = null;
+  showUserModal('Add User', '', '', 'Milkman', null, true);
+}
+function openEditUser(userId) {
+  _editUserId = userId;
+  var u = _cpUsers.find(function(x){ return x.id===userId; });
+  if (!u) return;
+  showUserModal('Edit User', u.username, u.full_name||'', u.role, u.route_id, u.is_active);
+}
+function showUserModal(title, username, fullName, role, routeId, isActive) {
+  var routeOpts = '<option value="">All Routes</option>'
+    + routes.map(function(r){ return '<option value="'+r.id+'"'+(routeId==r.id?' selected':'')+'>'+esc(r.name)+'</option>'; }).join('');
+  var html = '<div class="backdrop open" id="user-modal" style="z-index:200">'
+    +'<div class="modal modal-sm"><div class="mhead"><div class="mtitle">'+title+'</div>'
+    +'<button class="mclose" onclick="closeUserModal()">×</button></div>'
+    +'<div class="mbody"><div class="form-1">'
+    +'<div class="fg"><label class="flabel">Username *</label><input class="fcontrol" id="um-user" value="'+esc(username)+'" placeholder="e.g. john_milkman" '+(username==='admin'?'disabled':'')+'></div>'
+    +'<div class="fg"><label class="flabel">Full Name</label><input class="fcontrol" id="um-name" value="'+esc(fullName)+'" placeholder="Full name"></div>'
+    +'<div class="fg"><label class="flabel">Role</label><select class="fcontrol" id="um-role"><option'+(role==='Admin'?' selected':'')+'>Admin</option><option'+(role==='Manager'?' selected':'')+'>Manager</option><option'+(role==='Milkman'?' selected':'')+'>Milkman</option><option'+(role==='Customer'?' selected':'')+'>Customer</option></select></div>'
+    +'<div class="fg"><label class="flabel">Default Route (for Milkman)</label><select class="fcontrol" id="um-route">'+routeOpts+'</select></div>'
+    +(_editUserId?'':'<div class="fg"><label class="flabel">Password *</label><input class="fcontrol" id="um-pass" type="password" placeholder="Set password"></div>')
+    +'</div></div>'
+    +'<div class="mfooter"><button class="btn btn-outline" onclick="closeUserModal()">Cancel</button>'
+    +'<button class="btn btn-primary" onclick="saveUser()">Save</button></div>'
+    +'</div></div>';
+  document.body.insertAdjacentHTML('beforeend', html);
+  setTimeout(function(){ var el=document.getElementById('um-user'); if(el&&!el.disabled) el.focus(); },150);
+}
+
+function closeUserModal() {
+  var m = document.getElementById('user-modal');
+  if (m) m.remove();
+}
+
+async function saveUser() {
+  var username = (document.getElementById('um-user').value||'').trim();
+  var fullName = (document.getElementById('um-name').value||'').trim();
+  var role = document.getElementById('um-role').value;
+  var routeId = document.getElementById('um-route').value || null;
+  var passEl = document.getElementById('um-pass');
+  if (!username) return toast('Username is required','error');
+  try {
+    if (_editUserId) {
+      var data = { full_name:fullName||null, role:role, route_id:routeId||null };
+      await db.update('gs_users', _editUserId, data);
+      var i = _cpUsers.findIndex(function(u){ return u.id===_editUserId; });
+      if (i!==-1) _cpUsers[i] = Object.assign({}, _cpUsers[i], data);
+      toast('User updated', 'success');
+    } else {
+      var pw = passEl ? passEl.value : '';
+      if (!pw) return toast('Password is required','error');
+      var hash = hashPassword(pw);
+      var res = await db.insert('gs_users',{ username:username, password_hash:hash, full_name:fullName||null, role:role, route_id:routeId||null, is_active:true });
+      if (res[0]) _cpUsers.push(res[0]);
+      toast('User added', 'success');
+    }
+    closeUserModal();
+    renderCPContent();
+  } catch(e) { toast('Error: '+e.message,'error'); }
+}
+
+async function toggleUserActive(userId, newState) {
+  try {
+    await db.update('gs_users', userId, { is_active: newState });
+    var i = _cpUsers.findIndex(function(u){ return u.id===userId; });
+    if (i!==-1) _cpUsers[i].is_active = newState;
+    toast('User '+(newState?'activated':'deactivated'), 'success');
+    renderCPContent();
+  } catch(e) { toast('Error: '+e.message,'error'); }
+}
+
+async function resetPassword(userId) {
+  var newPw = prompt('Enter new password for this user:');
+  if (!newPw) return;
+  if (newPw.length < 4) return toast('Password must be at least 4 characters','error');
+  try {
+    await db.update('gs_users', userId, { password_hash: hashPassword(newPw) });
+    toast('Password reset successfully', 'success');
+  } catch(e) { toast('Error: '+e.message,'error'); }
 }
 
 // ── HELPERS ──
