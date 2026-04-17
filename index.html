@@ -323,7 +323,7 @@
       <button id="hamburger" onclick="toggleSidebar()" style="display:none;background:none;border:none;font-size:22px;cursor:pointer;padding:4px 8px;color:var(--text);line-height:1">&#9776;</button>
       <div class="page-title" id="page-title">Customers</div>
       <div id="last-sync" style="font-size:11px;color:var(--text-hint)"></div>
-      <button onclick="refreshAll()" title="Refresh data" style="background:none;border:1px solid var(--border);border-radius:7px;padding:5px 10px;cursor:pointer;font-size:13px;color:var(--text-muted);font-family:inherit" id="refresh-btn">&#8635; Refresh</button>
+      <button onclick="refreshAll()" title="Refresh data" style="background:none;border:1px solid var(--border);border-radius:7px;padding:5px 10px;cursor:pointer;font-size:13px;color:var(--text-muted);font-family:inherit" id="refresh-btn">⟳ Refresh</button>
       <span class="role-badge" id="role-badge">Admin</span>
       <button onclick="doLogout()" style="background:none;border:1px solid var(--border);border-radius:7px;padding:5px 10px;cursor:pointer;font-size:12px;color:var(--text-muted);font-family:inherit">Logout</button>
     </header>
@@ -828,7 +828,7 @@ async function refreshAll() {
     go(_currentPage);
     toast('Data refreshed', 'success');
   } catch(e) { toast('Refresh failed: '+e.message, 'error'); }
-  finally { if (btn) { btn.textContent = '&#8635; Refresh'; btn.disabled = false; } }
+  finally { if (btn) { btn.textContent = '⟳ Refresh'; btn.disabled = false; } }
 }
 
 // ── BRAND LOGO ──
