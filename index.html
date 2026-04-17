@@ -292,7 +292,7 @@
 <div class="app">
   <aside class="sidebar">
     <div class="sidebar-logo">
-      <div id="sidebar-farm-name" class="logo-name" style="font-size:14px;font-weight:700;color:#fff">GIRDHAAM</div>
+      <div id="sidebar-farm-name" class="logo-name" style="font-size:14px;font-weight:700;color:#fff"></div>
       <div class="logo-sub" id="sidebar-farm-sub" style="font-size:10px;opacity:0.5">GauRas</div>
     </div>
     <div class="nav-group">
@@ -338,7 +338,7 @@
   <div class="login-card">
     <!-- Farm Brand -->
     <div style="text-align:center;margin-bottom:16px">
-      <div style="font-size:20px;font-weight:700;color:var(--brand-dark);cursor:pointer" id="login-brand-name" onclick="editFarmName()" title="Click to edit farm name">GIRDHAAM</div>
+      <div style="font-size:20px;font-weight:700;color:var(--brand-dark);cursor:pointer" id="login-brand-name" onclick="editFarmName()" title="Click to edit farm name"></div>
       <div style="font-size:12px;color:var(--text-muted);margin-top:2px" id="login-brand-sub"></div>
       <div id="login-logo-display" style="margin-top:10px">
         <div id="login-logo-emoji" style="font-size:40px">🏡</div>
@@ -372,6 +372,33 @@
     </div><!-- end login form -->
   </div>
   <div style="color:rgba(255,255,255,0.35);font-size:11px;margin-top:16px;text-align:center" id="login-footer">GauRas &copy; Girdhaam &middot; Milk Distribution Management</div>
+</div>
+
+<!-- PASSWORD RESET MODAL -->
+<div class="backdrop" id="pw-reset-modal">
+  <div class="modal modal-sm">
+    <div class="mhead">
+      <div class="mtitle">Reset Password</div>
+      <button class="mclose" onclick="closeM('pw-reset-modal')">×</button>
+    </div>
+    <div class="mbody">
+      <div id="pw-reset-user-info" style="font-size:13px;color:var(--text-muted);margin-bottom:16px;padding:10px 14px;background:var(--bg);border-radius:8px"></div>
+      <div class="form-1">
+        <div class="fg">
+          <label class="flabel">New Password <span class="req">*</span></label>
+          <input class="fcontrol" id="pw-new" type="password" placeholder="Minimum 4 characters" onkeydown="if(event.key==='Enter')document.getElementById('pw-confirm').focus()">
+        </div>
+        <div class="fg">
+          <label class="flabel">Confirm Password <span class="req">*</span></label>
+          <input class="fcontrol" id="pw-confirm" type="password" placeholder="Re-enter password" onkeydown="if(event.key==='Enter')saveResetPassword()">
+        </div>
+      </div>
+    </div>
+    <div class="mfooter">
+      <button class="btn btn-outline" onclick="closeM('pw-reset-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveResetPassword()">Reset Password</button>
+    </div>
+  </div>
 </div>
 
 <div class="toasts" id="toasts"></div>
@@ -806,10 +833,10 @@ async function refreshAll() {
 
 // ── BRAND LOGO ──
 function editFarmName() {
-  var current = localStorage.getItem('gauras_brand_name') || 'GIRDHAAM';
+  var current = localStorage.getItem('gauras_brand_name') || '';
   var newName = prompt('Enter farm / dairy name:', current);
   if (newName === null) return;
-  newName = newName.trim() || 'GIRDHAAM';
+  newName = newName.trim() || '';
   localStorage.setItem('gauras_brand_name', newName);
   applyStoredLogo();
   toast('Farm name updated!', 'success');
@@ -854,10 +881,17 @@ function applyStoredLogo() {
       imgEl.src = logo;
     }
     // Update farm brand name
-    var brandName = localStorage.getItem('gauras_brand_name') || 'GIRDHAAM';
+    var brandName = localStorage.getItem('gauras_brand_name') || '';
+    var isFirstTime = !brandName;
     var brandSub = localStorage.getItem('gauras_brand_sub') || '';
     var loginNameEl = document.getElementById('login-brand-name');
-    if (loginNameEl) loginNameEl.textContent = brandName;
+    if (loginNameEl) {
+      if (isFirstTime) {
+        loginNameEl.innerHTML = '<span style="color:var(--text-hint);font-size:13px;font-style:italic">Click to set your dairy name</span>';
+      } else {
+        loginNameEl.textContent = brandName;
+      }
+    }
     var loginSubEl = document.getElementById('login-brand-sub');
     if (loginSubEl) loginSubEl.textContent = brandSub || '';
     var sidebarName = document.getElementById('sidebar-farm-name');
@@ -895,6 +929,22 @@ document.addEventListener('DOMContentLoaded', function() {
 const PAGE_TITLES = { customers:'Customers', routes:'Routes', masters:'Masters', dashboard:'Dashboard', delivery:'Daily Delivery', wallet:'Wallet & Payments', bottles:'Bottle Tracking', reports:'Reports', alerts:'Alerts', control:'Control Panel' };
 
 function go(page) {
+  // Check page permission before rendering
+  var pagePermMap = {
+    dashboard:'page_dashboard', customers:'page_customers', routes:'page_routes',
+    delivery:'page_delivery', wallet:'page_wallet', bottles:'page_bottles',
+    reports:'page_reports', alerts:'page_alerts', masters:'page_masters', control:'page_control'
+  };
+  var permKey = pagePermMap[page];
+  if (permKey && !can(permKey)) {
+    toast("You don't have permission to access this page", 'error');
+    // Redirect to first allowed page
+    var allowed = ['dashboard','delivery','customers','wallet','reports','alerts','bottles'];
+    for (var i=0; i<allowed.length; i++) {
+      if (can(pagePermMap[allowed[i]]||'')) { go(allowed[i]); return; }
+    }
+    return;
+  }
   _currentPage = page;
   if (page === 'dashboard') startAutoRefresh();
   else stopAutoRefresh();
@@ -1517,6 +1567,7 @@ function renderRouteMaster() {
 
 // ── CUSTOMER MODAL ──
 function openAddCust() {
+  if (!can('feat_add_customer')) return toast("You don't have permission to add customers",'error');
   editCustId = null;
   document.getElementById('cust-modal-title').textContent = 'Add Customer';
   ['c-code','c-fname','c-lname','c-phone','c-wa','c-building','c-flat','c-floor','c-street','c-city','c-pin','c-state','c-morning','c-evening','c-deposit','c-joined','c-notes','c-opening-bal'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
@@ -1532,6 +1583,7 @@ function openAddCust() {
 }
 
 function openEditCust(id) {
+  if (!can('feat_edit_customer')) return toast("You don't have permission to edit customers",'error');
   var obWrap = document.getElementById('c-opening-bal');
   if (obWrap) { obWrap.closest('.fg').style.display = 'none'; }
   const c = customers.find(x=>x.id===id); if(!c) return;
@@ -1631,6 +1683,7 @@ async function saveCustomer() {
 
 // ── ROUTE MODAL ──
 function openAddRoute() {
+  if (!can('feat_add_route')) return toast("You don't have permission to add routes",'error');
   editRouteId=null;
   document.getElementById('route-modal-title').textContent='Add Route';
   ['r-name','r-area','r-milkman','r-notes'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
@@ -1662,6 +1715,7 @@ async function saveRoute() {
 
 // ── RATE MODAL ──
 function openRateModal() {
+  if (!can('feat_set_rate')) return toast("You don't have permission to set rates",'error');
   document.getElementById('rt-rate').value='';
   document.getElementById('rt-notes').value='';
   document.getElementById('rt-date').value=new Date().toISOString().split('T')[0];
@@ -1681,6 +1735,8 @@ async function saveRate() {
 
 // ── DELETE ──
 function confirmDel(type,id,name) {
+  if (type==='customer' && !can('feat_delete_customer')) return toast("You don't have permission to delete customers",'error');
+  if (type==='route' && !can('feat_add_route')) return toast("You don't have permission to delete routes",'error');
   document.getElementById('conf-title').textContent=`Delete ${type==='customer'?'Customer':'Route'}`;
   document.getElementById('conf-msg').textContent=`Delete "${name}"? This cannot be undone.`;
   document.getElementById('conf-ok').onclick=()=>doDel(type,id);
@@ -1701,6 +1757,7 @@ async function doDel(type,id) {
 
 // ── EXPORT ──
 function exportCSV() {
+  if (!can('feat_export')) return toast("You don't have permission to export",'error');
   const hdr=['Code','First Name','Last Name','Phone','WhatsApp','Building','Flat','Floor','Street','City','PIN','State','Route','Morning(L)','Evening(L)','Deposit(Rs.)','Grace Days','Payment','Status','Schedule','Delivery Days','Joining Date','Pause From','Resume On','Delivery Notes'];
   const rows=customers.map(c=>{
     const rt=routes.find(r=>r.id===c.route_id);
@@ -2293,6 +2350,7 @@ let editingTopupCustId = null;
 let editingTopupOldAmount = 0;
 
 function openEditTopup(topupId, custId) {
+  if (!can('feat_edit_topup')) return toast("You don't have permission to edit top-ups",'error');
   const t = topups.find(x => x.id === topupId);
   if (!t) return;
   editingTopupId = topupId;
@@ -2343,6 +2401,7 @@ async function saveEditTopup() {
 }
 
 async function deleteTopup(topupId, custId) {
+  if (!can('feat_delete_topup')) return toast("You don't have permission to delete top-ups",'error');
   const t = topups.find(x => x.id === topupId);
   if (!t) return;
   if (!confirm('Delete this Rs.' + t.amount + ' top-up? Wallet balance will be reduced by this amount.')) return;
@@ -2363,6 +2422,7 @@ async function deleteTopup(topupId, custId) {
 
 // ── TOP-UP MODAL ──
 function openTopup(custId) {
+  if (!can('feat_topup')) return toast("You don't have permission to record top-ups",'error');
   walletCustId = custId;
   const c = customers.find(x => x.id === custId);
   if (!c) return;
@@ -2467,6 +2527,7 @@ async function saveTopup() {
 
 // ── WALLET EXPORT ──
 function exportWalletCSV() {
+  if (!can('feat_export')) return toast("You don't have permission to export",'error');
   var today = todayStr();
   var rate = getRateForDate(today);
   var hdr = ['Code','Customer','Phone','Route','Balance(Rs)','DailyCost(Rs)','DaysLeft','Status','LastTopupDate','LastTopupAmt','PayMode'];
@@ -2889,6 +2950,7 @@ async function undoDelivery(deliveryId, custId) {
 }
 
 async function submitAllRoute() {
+  if (!can('feat_submit_delivery')) return toast("You don't have permission to submit deliveries",'error');
   const today = todayStr();
   const pending = Object.keys(deliveryEntries).filter(function(custId) {
     const saved = deliveries.find(function(d) {
@@ -4498,6 +4560,7 @@ function exportBottleCSV() {
 }
 
 function printRouteList() {
+  if (!can('feat_print')) return toast("You don't have permission to print",'error');
   var today = todayStr();
   var dow = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date(today).getDay()];
   var route = routes.find(function(r){ return String(r.id)===String(deliveryRoute); });
@@ -4941,7 +5004,7 @@ function showUserModal(title, username, fullName, role, routeId, isActive) {
 }
 
 function saveBrandSettings() {
-  var name = (document.getElementById('cp-brand-name').value||'').trim() || 'GIRDHAAM';
+  var name = (document.getElementById('cp-brand-name').value||'').trim() || '';
   var sub = (document.getElementById('cp-brand-sub').value||'').trim();
   try {
     localStorage.setItem('gauras_brand_name', name);
@@ -5005,13 +5068,31 @@ async function toggleUserActive(userId, newState) {
   } catch(e) { toast('Error: '+e.message,'error'); }
 }
 
-async function resetPassword(userId) {
-  var newPw = prompt('Enter new password for this user:');
-  if (!newPw) return;
+let _resetPasswordUserId = null;
+
+function resetPassword(userId) {
+  _resetPasswordUserId = userId;
+  var u = _cpUsers.find(function(x){ return x.id===userId; });
+  var infoEl = document.getElementById('pw-reset-user-info');
+  if (infoEl) infoEl.innerHTML = u
+    ? '<strong>'+esc(u.full_name||u.username)+'</strong> &middot; '+esc(u.role)+' &middot; @'+esc(u.username)
+    : 'User ID: '+userId;
+  document.getElementById('pw-new').value = '';
+  document.getElementById('pw-confirm').value = '';
+  openM('pw-reset-modal');
+  setTimeout(function(){ var el=document.getElementById('pw-new'); if(el) el.focus(); }, 150);
+}
+
+async function saveResetPassword() {
+  var newPw = (document.getElementById('pw-new').value||'').trim();
+  var confirm2 = (document.getElementById('pw-confirm').value||'').trim();
+  if (!newPw) return toast('Please enter a new password','error');
   if (newPw.length < 4) return toast('Password must be at least 4 characters','error');
+  if (newPw !== confirm2) return toast('Passwords do not match','error');
   try {
-    await db.update('gs_users', userId, { password_hash: hashPassword(newPw) });
-    toast('Password reset successfully', 'success');
+    await db.update('gs_users', _resetPasswordUserId, { password_hash: hashPassword(newPw) });
+    toast('Password reset successfully','success');
+    closeM('pw-reset-modal');
   } catch(e) { toast('Error: '+e.message,'error'); }
 }
 
