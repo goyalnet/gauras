@@ -5019,6 +5019,7 @@ async function renderControlPanel() {
 
 
 function renderCPContent() {
+  try {
   var roles = ['Admin','Manager','Milkman','Customer'];
   var pages = [
     {key:'page_dashboard',label:'Dashboard'},{key:'page_customers',label:'Customers'},
@@ -5139,6 +5140,7 @@ function renderCPContent() {
   html += '</tbody></table></div></div>';
 
   document.getElementById('content').innerHTML = html;
+  } catch(err) { console.error('renderCPContent error:',err); document.getElementById('content').innerHTML = '<div style="padding:20px;color:red">Control Panel error: '+err.message+'</div>'; }
 }
 
 function togglePermBtn(btn) {
