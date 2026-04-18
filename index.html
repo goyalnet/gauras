@@ -1423,6 +1423,7 @@ async function saveSetting(key, value) {
 }
 
 let mastersTab = 'rate';
+let cpTab = 'users'; // Control Panel active tab
 
 function renderMasters() {
   buildMastersTabs();
@@ -5060,127 +5061,166 @@ async function renderControlPanel() {
 // Also make doToggleSession reload CP after toggling
 
 
+function setCPTab(i) {
+  var tabs = ['users','perms','brand','whatsapp'];
+  cpTab = tabs[i] || tabs[0];
+  renderCPContent();
+}
+
 function renderCPContent() {
   try {
-  var roles = ['Admin','Manager','Milkman','Customer'];
-  var pages = [
-    {key:'page_dashboard',label:'Dashboard'},{key:'page_customers',label:'Customers'},
-    {key:'page_routes',label:'Routes'},{key:'page_delivery',label:'Daily Delivery'},
-    {key:'page_wallet',label:'Wallet & Payments'},{key:'page_bottles',label:'Bottle Tracking'},
-    {key:'page_reports',label:'Reports'},{key:'page_alerts',label:'Alerts'},
-    {key:'page_masters',label:'Masters'},{key:'page_control',label:'Control Panel'}
-  ];
-  var features = [
-    {key:'feat_add_customer',label:'Add Customer'},{key:'feat_edit_customer',label:'Edit Customer'},
-    {key:'feat_delete_customer',label:'Delete Customer'},{key:'feat_topup',label:'Record Top-up'},
-    {key:'feat_edit_topup',label:'Edit Top-up'},{key:'feat_delete_topup',label:'Delete Top-up'},
-    {key:'feat_set_rate',label:'Set Rate'},{key:'feat_add_route',label:'Add/Edit Route'},
-    {key:'feat_submit_delivery',label:'Submit Delivery'},{key:'feat_export',label:'Export Reports'},
-    {key:'feat_print',label:'Print List'},{key:'feat_arrange_sequence',label:'Arrange Sequence'}
-  ];
+  // Tab bar
+  var tabDefs = [{k:'users',l:'Users'},{k:'perms',l:'Permissions'},{k:'brand',l:'Brand'},{k:'whatsapp',l:'WhatsApp'}];
+  var html = '<div class="tabs" style="margin-bottom:0">';
+  tabDefs.forEach(function(t,i){
+    html += '<div class="tab'+(cpTab===t.k?' active':'')+'" onclick="setCPTab('+i+')">'+t.l+'</div>';
+  });
+  html += '</div>';
+  html += '<div style="margin-top:0">';
 
-  function getPermValue(role, key) {
-    if (_cpPerms[role] && _cpPerms[role][key] !== undefined) return _cpPerms[role][key];
-    return (DEFAULT_PERMISSIONS[role]||{})[key] !== false;
+  // ── TAB: Users ──
+  if (cpTab==='users') {
+    html += '<div class="cp-section">';
+    html += '<div class="cp-section-title" style="display:flex;align-items:center;justify-content:space-between">User Management <button class="btn btn-primary btn-sm" onclick="openAddUser()">+ Add User</button></div>';
+    html += '<div class="tbl-wrap"><table><thead><tr><th>Username</th><th>Full Name</th><th>Role</th><th>Route</th><th>Last Login</th><th>Status</th><th>Actions</th></tr></thead><tbody>';
+    _cpUsers.forEach(function(u){
+      var rt = routes.find(function(r){ return r.id===u.route_id;});
+      html += '<tr>'
+        +'<td><span class="td-code">'+esc(u.username)+'</span></td>'
+        +'<td>'+esc(u.full_name||'--')+'</td>'
+        +'<td><span class="badge badge-'+(u.role==='Admin'?'Active':u.role==='Manager'?'Grace':'Paused')+'">'+esc(u.role)+'</span></td>'
+        +'<td>'+(rt?'<span class="badge badge-route">'+esc(rt.name)+'</span>':'<span style="color:var(--text-hint)">All routes</span>')+'</td>'
+        +'<td style="font-size:12px;color:var(--text-muted)">'+(u.last_login?fmtDate(u.last_login):'Never')+'</td>'
+        +'<td><span class="badge badge-'+(u.is_active?'Active':'Stopped')+'">'+(u.is_active?'Active':'Inactive')+'</span></td>'
+        +'<td><div class="acts">'
+        +'<button class="btn btn-outline btn-xs" onclick="openEditUser('+u.id+')">Edit</button>'
+        +(u.username!=='admin'?'<button class="btn btn-danger btn-xs" onclick="toggleUserActive('+u.id+','+(!u.is_active)+')">'+(u.is_active?'Deactivate':'Activate')+'</button>':'')
+        +'<button class="btn btn-outline btn-xs" onclick="resetPassword('+u.id+')">Reset PW</button>'
+        +'</div></td>'
+        +'</tr>';
+    });
+    html += '</tbody></table></div></div>';
   }
 
-  function permToggle(role, key) {
-    var locked = role==='Admin';
-    var val = locked ? true : getPermValue(role, key);
-    var cls = locked ? 'locked' : (val?'on':'off');
-    var onclickAttr = locked ? '' : ('data-role="'+role+'" data-key="'+key+'" onclick="togglePermBtn(this)"');
-    return '<div class="perm-cell"><button class="perm-toggle '+cls+'" '+onclickAttr+' title="'+(locked?'Admin always has full access':val?'Click to revoke':'Click to allow')+'"></button></div>';
+  // ── TAB: Permissions ──
+  if (cpTab==='perms') {
+    var roles = ['Admin','Manager','Milkman','Customer'];
+    var pages = [
+      {key:'page_dashboard',label:'Dashboard'},{key:'page_customers',label:'Customers'},
+      {key:'page_routes',label:'Routes'},{key:'page_delivery',label:'Daily Delivery'},
+      {key:'page_wallet',label:'Wallet & Payments'},{key:'page_bottles',label:'Bottle Tracking'},
+      {key:'page_reports',label:'Reports'},{key:'page_alerts',label:'Alerts'},
+      {key:'page_masters',label:'Masters'},{key:'page_control',label:'Control Panel'}
+    ];
+    var features = [
+      {key:'feat_add_customer',label:'Add Customer'},{key:'feat_edit_customer',label:'Edit Customer'},
+      {key:'feat_delete_customer',label:'Delete Customer'},{key:'feat_topup',label:'Record Top-up'},
+      {key:'feat_edit_topup',label:'Edit Top-up'},{key:'feat_delete_topup',label:'Delete Top-up'},
+      {key:'feat_set_rate',label:'Set Rate'},{key:'feat_add_route',label:'Add/Edit Route'},
+      {key:'feat_submit_delivery',label:'Submit Delivery'},{key:'feat_export',label:'Export Reports'},
+      {key:'feat_print',label:'Print List'},{key:'feat_arrange_sequence',label:'Arrange Sequence'}
+    ];
+    function getPermValue(role, key) {
+      if (_cpPerms[role] && _cpPerms[role][key] !== undefined) return _cpPerms[role][key];
+      return (DEFAULT_PERMISSIONS[role]||{})[key] !== false;
+    }
+    function permToggle(role, key) {
+      var locked = role==='Admin';
+      var val = locked ? true : getPermValue(role, key);
+      var cls = locked ? 'locked' : (val?'on':'off');
+      var onclickAttr = locked ? '' : ('data-role="'+role+'" data-key="'+key+'" onclick="togglePermBtn(this)"');
+      return '<div class="perm-cell"><button class="perm-toggle '+cls+'" '+onclickAttr+'></button></div>';
+    }
+    function permSection(title, items) {
+      var h = '<div style="padding:10px 12px;background:var(--bg);font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;border-top:1px solid var(--border)">'+title+'</div>';
+      items.forEach(function(item){
+        h += '<div class="perm-row"><div class="perm-label">'+item.label+'</div>';
+        roles.forEach(function(role){ h += permToggle(role, item.key); });
+        h += '</div>';
+      });
+      return h;
+    }
+    html += '<div class="cp-section">';
+    html += '<div class="cp-section-title">Permission Matrix</div>';
+    html += '<div class="perm-grid"><div class="perm-header">Permission</div>';
+    roles.forEach(function(r){ html += '<div class="perm-header">'+r+'</div>'; });
+    html += '</div>';
+    html += permSection('Pages', pages);
+    html += permSection('Features', features);
+    html += '<div style="padding:12px 16px;border-top:1px solid var(--border);display:flex;justify-content:flex-end">';
+    html += '<button class="btn btn-primary" onclick="saveAllPerms()">Save Permissions</button>';
+    html += '</div></div>';
   }
 
-  function permSection(title, items) {
-    var html = '<div style="padding:10px 12px;background:var(--bg);font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;border-top:1px solid var(--border)">'+title+'</div>';
-    items.forEach(function(item){
-      html += '<div class="perm-row">';
-      html += '<div class="perm-label">'+item.label+'</div>';
-      roles.forEach(function(role){ html += permToggle(role, item.key); });
+  // ── TAB: Brand ──
+  if (cpTab==='brand') {
+    html += '<div class="cp-section">';
+    html += '<div class="cp-section-title">Farm Brand Settings</div>';
+    html += '<div style="padding:12px 16px;background:var(--brand-light);border-bottom:1px solid var(--border);font-size:12px;color:var(--brand-dark)">These details identify your farm. GauRas product identity is always shown separately.</div>';
+    html += '<div style="padding:16px;display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">';
+    html += '<div><label class="flabel" style="display:block;margin-bottom:5px">Farm / Dairy Name</label>';
+    html += '<input class="fcontrol" id="cp-brand-name" style="min-width:200px" placeholder="e.g. Girdhaam Dairy" value="'+esc(localStorage.getItem('gauras_brand_name')||'')+'"></div>';
+    html += '<div><label class="flabel" style="display:block;margin-bottom:5px">Tagline (optional)</label>';
+    html += '<input class="fcontrol" id="cp-brand-sub" style="min-width:250px" placeholder="e.g. Fresh Milk Every Morning" value="'+esc(localStorage.getItem('gauras_brand_sub')||'')+'"></div>';
+    html += '<div><button class="btn btn-primary" onclick="saveBrandSettings()">Save Brand</button></div>';
+    html += '</div>';
+    html += '<div style="padding:0 16px 16px;display:flex;gap:10px;align-items:center">';
+    html += '<label class="flabel">Logo</label>';
+    html += '<button class="btn btn-outline" onclick="triggerLogoUpload()">Upload Logo</button>';
+    html += (localStorage.getItem('gauras_logo')?' <button class="btn btn-danger btn-sm" onclick="removeLogo()">Remove Logo</button>':'');
+    if (localStorage.getItem('gauras_logo')) html += '<img src="'+localStorage.getItem('gauras_logo')+'" style="height:40px;object-fit:contain;border-radius:6px;border:1px solid var(--border)">';
+    html += '</div></div>';
+  }
+
+  // ── TAB: WhatsApp ──
+  if (cpTab==='whatsapp') {
+    html += '<div class="cp-section">';
+    html += '<div class="cp-section-title">WhatsApp Messaging Settings</div>';
+    html += '<div style="padding:12px 16px;background:var(--brand-light);border-bottom:1px solid var(--border);font-size:12px;color:var(--brand-dark)">Configure WhatsApp Business API for automatic messaging. Until configured, messages open WhatsApp directly for manual send.</div>';
+    html += '<div style="padding:16px">';
+    html += '<div style="display:flex;align-items:center;gap:14px;padding:14px 16px;background:var(--bg);border-radius:10px;border:1px solid var(--border);margin-bottom:16px">';
+    html += '<div style="flex:1"><div style="font-weight:600">Auto-send via API</div>';
+    html += '<div style="font-size:12px;color:var(--text-muted);margin-top:2px">'+(waSettings.enabled?'Messages send automatically':'Messages open WhatsApp for manual send')+'</div></div>';
+    html += '<button onclick="doToggleWA()" class="perm-toggle '+(waSettings.enabled?'on':'off')+'" style="width:48px;height:26px;flex-shrink:0"></button>';
+    html += '</div>';
+    html += '<div class="form-2" style="gap:12px">';
+    html += '<div class="fg"><label class="flabel">Provider</label>';
+    html += '<select class="fcontrol" id="wa-provider"><option value="">-- Select Provider --</option>';
+    html += '<option value="interakt"'+(waSettings.provider==='interakt'?' selected':'')+'>Interakt</option>';
+    html += '<option value="wati"'+(waSettings.provider==='wati'?' selected':'')+'>Wati</option>';
+    html += '<option value="aisensy"'+(waSettings.provider==='aisensy'?' selected':'')+'>AiSensy</option>';
+    html += '<option value="gupshup"'+(waSettings.provider==='gupshup'?' selected':'')+'>Gupshup</option>';
+    html += '</select></div>';
+    html += '<div class="fg"><label class="flabel">API Key</label>';
+    html += '<input class="fcontrol" id="wa-apikey" type="password" placeholder="Paste API key here" value="'+esc(waSettings.apiKey||'')+'"></div>';
+    html += '<div class="fg"><label class="flabel">Sender Number <span class="fhint">(Gupshup only)</span></label>';
+    html += '<input class="fcontrol" id="wa-sender" placeholder="e.g. 919876543210" value="'+esc(waSettings.senderNumber||'')+'"></div>';
+    html += '</div>';
+    html += '<div style="display:flex;gap:8px;margin-top:16px">';
+    html += '<button class="btn btn-primary" onclick="saveWASettings()">Save Settings</button>';
+    html += (waSettings.apiKey?'<button class="btn btn-outline" onclick="testWAMessage()">Send Test Message</button>':'');
+    html += '</div>';
+    html += '<div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">';
+    html += '<div style="font-size:13px;font-weight:600;margin-bottom:10px;color:var(--text)">Automated Messages</div>';
+    html += '<div style="display:flex;flex-direction:column;gap:8px;">';
+    var automsg = [
+      {label:'Registration Approved', desc:'Sent when admin approves a customer registration', icon:'✅'},
+      {label:'Top-up Receipt', desc:'Sent after recording a payment', icon:'💰'},
+      {label:'Low Balance Alert', desc:'Sent from Alerts page per customer', icon:'⚠️'}
+    ];
+    automsg.forEach(function(m){
+      html += '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg);border-radius:8px;border:1px solid var(--border)">';
+      html += '<div style="font-size:20px">'+m.icon+'</div>';
+      html += '<div><div style="font-size:13px;font-weight:600">'+m.label+'</div>';
+      html += '<div style="font-size:12px;color:var(--text-muted)">'+m.desc+'</div></div>';
+      html += '<span class="badge badge-Active" style="margin-left:auto">Active</span>';
       html += '</div>';
     });
-    return html;
+    html += '</div></div>';
+    html += '</div></div>';
   }
 
-  var html = '';
-
-  // Permission Matrix
-  html += '<div class="cp-section">';
-  html += '<div class="cp-section-title">Permission Matrix <span style="font-size:12px;color:var(--text-muted);font-weight:400">— click toggles to change access per role</span></div>';
-  html += '<div class="perm-grid">';
-  html += '<div class="perm-header">Permission</div>';
-  roles.forEach(function(r){ html += '<div class="perm-header">'+r+'</div>'; });
   html += '</div>';
-  html += permSection('Pages', pages);
-  html += permSection('Features', features);
-  html += '<div style="padding:12px 16px;border-top:1px solid var(--border);display:flex;justify-content:flex-end">';
-  html += '<button class="btn btn-primary" onclick="saveAllPerms()">Save Permissions</button>';
-  html += '</div></div>';
-
-  // Brand Settings
-  var storedName = "'; try { storedName = localStorage.getItem('gauras_brand_name')||'GauRas'; } catch(e){}; var n='";
-  html += '<div class="cp-section" style="margin-bottom:16px">';
-  html += '<div class="cp-section-title">Your Farm Brand Settings</div>';
-  html += '<div style="padding:12px 16px;background:var(--brand-light);border-bottom:1px solid var(--border);font-size:12px;color:var(--brand-dark)">These details identify your farm in the app. The GauRas product identity is always shown separately.</div>';
-  html += '<div style="padding:16px;display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">';
-  html += '<div><label class="flabel" style="display:block;margin-bottom:5px">Farm / Dairy Name</label>';
-  html += '<input class="fcontrol" id="cp-brand-name" style="min-width:200px" placeholder="e.g. Girdhaam Dairy" value="'+esc(localStorage.getItem('gauras_brand_name')||'')+'"></div>';
-  html += '<div><label class="flabel" style="display:block;margin-bottom:5px">Tagline (optional)</label>';
-  html += '<input class="fcontrol" id="cp-brand-sub" style="min-width:250px" placeholder="e.g. Fresh Milk Every Morning" value="'+esc(localStorage.getItem('gauras_brand_sub')||'')+'"></div>';
-  html += '<div><button class="btn btn-primary" onclick="saveBrandSettings()">Save Brand</button></div>';
-  html += '<div><label class="flabel" style="display:block;margin-bottom:5px">Logo</label>';
-  html += '<button class="btn btn-outline" onclick="triggerLogoUpload()">Upload Logo</button>';
-  html += (localStorage.getItem('gauras_logo')?' <button class="btn btn-danger btn-sm" onclick="removeLogo()">Remove Logo</button>':'');
-  html += '</div></div></div>';
-
-  // WhatsApp Settings
-  html += '<div class="cp-section" style="margin-bottom:16px">';
-  html += '<div class="cp-section-title">WhatsApp Messaging Settings</div>';
-  html += '<div style="padding:12px 16px;background:var(--brand-light);border-bottom:1px solid var(--border);font-size:12px;color:var(--brand-dark)">Configure WhatsApp Business API for automatic messaging. Until configured, messages open WhatsApp directly for manual send.</div>';
-  html += '<div style="padding:16px;display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">';
-  html += '<div style="display:flex;align-items:center;gap:10px;width:100%;padding-bottom:12px;border-bottom:1px solid var(--border);margin-bottom:4px">';
-  html += '<div style="flex:1"><div style="font-weight:600">Auto-send via API</div><div style="font-size:12px;color:var(--text-muted)">When enabled, messages send automatically without opening WhatsApp</div></div>';
-  html += '<button onclick="doToggleWA()" class="perm-toggle '+(waSettings.enabled?'on':'off')+'" style="width:48px;height:26px;flex-shrink:0"></button>';
-  html += '</div>';
-  html += '<div style="width:100%"><label class="flabel" style="display:block;margin-bottom:5px">Provider</label>';
-  html += '<select class="fcontrol" id="wa-provider" style="max-width:200px"><option value="">-- Select Provider --</option>';
-  html += '<option value="interakt"'+(waSettings.provider==='interakt'?' selected':'')+'>Interakt</option>';
-  html += '<option value="wati"'+(waSettings.provider==='wati'?' selected':'')+'>Wati</option>';
-  html += '<option value="aisensy"'+(waSettings.provider==='aisensy'?' selected':'')+'>AiSensy</option>';
-  html += '<option value="gupshup"'+(waSettings.provider==='gupshup'?' selected':'')+'>Gupshup</option>';
-  html += '</select></div>';
-  html += '<div style="flex:1;min-width:280px"><label class="flabel" style="display:block;margin-bottom:5px">API Key</label>';
-  html += '<input class="fcontrol" id="wa-apikey" type="password" placeholder="Paste your API key here" value="'+esc(waSettings.apiKey||'')+'"></div>';
-  html += '<div style="min-width:180px"><label class="flabel" style="display:block;margin-bottom:5px">Sender Number (for Gupshup)</label>';
-  html += '<input class="fcontrol" id="wa-sender" placeholder="e.g. 919876543210" value="'+esc(waSettings.senderNumber||'')+'"></div>';
-  html += '<div><button class="btn btn-primary" onclick="saveWASettings()">Save WA Settings</button>';
-  html += (waSettings.apiKey?'<button class="btn btn-outline" style="margin-left:8px" onclick="testWAMessage()">Test Message</button>':'');
-  html += '</div>';
-  html += '</div></div>';
-
-  // User Management
-  html += '<div class="cp-section">';
-  html += '<div class="cp-section-title" style="display:flex;align-items:center;justify-content:space-between">User Management <button class="btn btn-primary btn-sm" onclick="openAddUser()">+ Add User</button></div>';
-  html += '<div class="tbl-wrap"><table><thead><tr><th>Username</th><th>Full Name</th><th>Role</th><th>Route</th><th>Last Login</th><th>Status</th><th>Actions</th></tr></thead><tbody>';
-  _cpUsers.forEach(function(u){
-    var rt = routes.find(function(r){ return r.id===u.route_id;});
-    html += '<tr>'
-      +'<td><span class="td-code">'+esc(u.username)+'</span></td>'
-      +'<td>'+esc(u.full_name||'--')+'</td>'
-      +'<td><span class="badge badge-'+(u.role==='Admin'?'Active':u.role==='Manager'?'Grace':'Paused')+'">'+esc(u.role)+'</span></td>'
-      +'<td>'+(rt?'<span class="badge badge-route">'+esc(rt.name)+'</span>':'<span style="color:var(--text-hint)">All routes</span>')+'</td>'
-      +'<td style="font-size:12px;color:var(--text-muted)">'+(u.last_login?fmtDate(u.last_login):'Never')+'</td>'
-      +'<td><span class="badge badge-'+(u.is_active?'Active':'Stopped')+'">'+(u.is_active?'Active':'Inactive')+'</span></td>'
-      +'<td><div class="acts">'
-      +'<button class="btn btn-outline btn-xs" onclick="openEditUser('+u.id+')">Edit</button>'
-      +(u.username!=='admin'?'<button class="btn btn-danger btn-xs" onclick="toggleUserActive('+u.id+','+(!u.is_active)+')">'+(u.is_active?'Deactivate':'Activate')+'</button>':'')
-      +'<button class="btn btn-outline btn-xs" onclick="resetPassword('+u.id+')">Reset PW</button>'
-      +'</div></td>'
-      +'</tr>';
-  });
-  html += '</tbody></table></div></div>';
-
   document.getElementById('content').innerHTML = html;
   } catch(err) { console.error('renderCPContent error:',err); document.getElementById('content').innerHTML = '<div style="padding:20px;color:red">Control Panel error: '+err.message+'</div>'; }
 }
