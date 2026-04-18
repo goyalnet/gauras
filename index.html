@@ -761,6 +761,11 @@ async function boot() {
     +'<div style="font-size:15px;font-weight:600">Loading GauRas...</div>'
     +'<div style="font-size:13px">Connecting to database</div>'
     +'</div>';
+  // Load global settings first
+  try {
+    var settingRows = await db.get('gs_settings','order=setting_key.asc');
+    settingRows.forEach(function(s){ appSettings[s.setting_key] = s.setting_value; });
+  } catch(e){}
   try { routes    = await db.get('gs_routes',    'order=name.asc'); } catch(e) { routes = []; }
   try { customers = await db.get('gs_customers', 'order=last_name.asc,first_name.asc'); } catch(e) { customers = []; }
   try { rates     = await db.get('gs_rates',     'order=effective_from.desc'); } catch(e) { rates = []; }
@@ -1338,6 +1343,30 @@ function renderRoutes() {
 }
 
 // ── MASTERS ──
+// Global app settings loaded from gs_settings
+var appSettings = {
+  morning_delivery_enabled: 'true',
+  evening_delivery_enabled: 'false'
+};
+
+function getSetting(key) { return appSettings[key] === 'true'; }
+
+async function saveSetting(key, value) {
+  appSettings[key] = value ? 'true' : 'false';
+  try {
+    var existing = await db.get('gs_settings','setting_key=eq.'+encodeURIComponent(key));
+    if (existing && existing.length > 0) {
+      await db.update('gs_settings', existing[0].id, {
+        setting_value: value ? 'true' : 'false',
+        updated_at: new Date().toISOString(),
+        updated_by: _session ? (_session.user.full_name||_session.user.username) : 'Admin'
+      });
+    } else {
+      await db.insert('gs_settings', { setting_key: key, setting_value: value ? 'true' : 'false' });
+    }
+  } catch(e) { toast('Error saving setting: '+e.message,'error'); }
+}
+
 let mastersTab = 'rate';
 
 function renderMasters() {
@@ -2737,8 +2766,15 @@ function renderDelivery() {
   html += '<div style="font-size:13px;opacity:0.75;margin-top:2px">'+done+' of '+total+' done &middot; '+totalLitres.toFixed(1)+'L delivered &middot; Rs.'+totalDeducted.toFixed(0)+' deducted &middot; '+totalEmpties+' empties</div></div>';
   html += '<div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end">';
   html += '<div style="display:flex;gap:6px">';
-  html += '<button class="del-session-btn'+(deliverySession==='Morning'?' active':'')+'" onclick="deliverySession=\'Morning\';renderDelivery()">Morning</button>';
-  html += '<button class="del-session-btn'+(deliverySession==='Evening'?' active':'')+'" onclick="deliverySession=\'Evening\';renderDelivery()">Evening</button>';
+  // Only show enabled sessions
+  var morningEnabled = getSetting('morning_delivery_enabled');
+  var eveningEnabled = getSetting('evening_delivery_enabled');
+  // If current session is disabled, switch to enabled one
+  if (deliverySession==='Morning' && !morningEnabled && eveningEnabled) deliverySession='Evening';
+  if (deliverySession==='Evening' && !eveningEnabled && morningEnabled) deliverySession='Morning';
+  if (morningEnabled) html += '<button class="del-session-btn'+(deliverySession==='Morning'?' active':'')+'" onclick="deliverySession=\'Morning\';renderDelivery()">🌅 Morning</button>';
+  if (eveningEnabled) html += '<button class="del-session-btn'+(deliverySession==='Evening'?' active':'')+'" onclick="deliverySession=\'Evening\';renderDelivery()">🌆 Evening</button>';
+  if (!morningEnabled && !eveningEnabled) html += '<div style="font-size:13px;color:var(--text-muted);padding:8px 0">No delivery sessions enabled. Go to Control Panel to enable.</div>';
   // Note: deliverySearch persists across session toggles intentionally
   html += '</div>';
   html += '<select class="del-route-select" style="font-size:13px;padding:7px 12px;color:var(--text);background:#fff;border:1.5px solid var(--border);border-radius:8px;min-width:180px" onchange="deliveryRoute=this.value;deliverySearch=\'\';renderDelivery()">'+routeOpts+'</select>';
@@ -4070,8 +4106,12 @@ async function renderDashboard() {
   var stopped = customers.filter(function(c){ return c.status==='Stopped'; }).length;
 
   // Delivery progress
+  var morningOn2 = getSetting('morning_delivery_enabled');
+  var eveningOn2 = getSetting('evening_delivery_enabled');
   var totalExpected = customers.filter(function(c){
-    return c.status!=='Stopped' && !isOnPause(c,today) && isDeliveryDay(c,today) && ((c.morning_quota||0)+(c.evening_quota||0)>0);
+    var mq = morningOn2 ? (c.morning_quota||0) : 0;
+    var eq = eveningOn2 ? (c.evening_quota||0) : 0;
+    return c.status!=='Stopped' && !isOnPause(c,today) && isDeliveryDay(c,today) && (mq+eq)>0;
   }).length;
   var delivered = todayDel.filter(function(d){ return d.status!=='Not Delivered';}).map(function(d){ return d.customer_id;}).filter(function(v,i,a){ return a.indexOf(v)===i;}).length;
   var litres = todayDel.reduce(function(s,d){ return s+(d.qty_delivered||0);},0);
@@ -4887,6 +4927,25 @@ function renderCPContent() {
   html += '<button class="btn btn-primary" onclick="saveAllPerms()">Save Permissions</button>';
   html += '</div></div>';
 
+  // Delivery Session Settings
+  var morningOn = getSetting('morning_delivery_enabled');
+  var eveningOn = getSetting('evening_delivery_enabled');
+  html += '<div class="cp-section" style="margin-bottom:16px">';
+  html += '<div class="cp-section-title">Delivery Session Control</div>';
+  html += '<div style="padding:12px 16px;background:var(--brand-light);border-bottom:1px solid var(--border);font-size:12px;color:var(--brand-dark)">Enable or disable delivery sessions globally. Disabled sessions are hidden from milkman delivery screen and reports.</div>';
+  html += '<div style="padding:16px;display:flex;gap:24px;flex-wrap:wrap">';
+  html += '<div style="display:flex;align-items:center;gap:14px;padding:14px 18px;background:var(--bg);border-radius:10px;border:1px solid var(--border);flex:1;min-width:200px">';
+  html += '<div style="font-size:28px">🌅</div>';
+  html += '<div style="flex:1"><div style="font-weight:700;font-size:14px">Morning Delivery</div><div style="font-size:12px;color:var(--text-muted);margin-top:2px">'+(morningOn?'Currently active':'Currently disabled')+'</div></div>';
+  html += '<button onclick="toggleDeliverySession(0)" class="perm-toggle '+(morningOn?'on':'off')+'" style="flex-shrink:0"></button>';
+  html += '</div>';
+  html += '<div style="display:flex;align-items:center;gap:14px;padding:14px 18px;background:var(--bg);border-radius:10px;border:1px solid var(--border);flex:1;min-width:200px">';
+  html += '<div style="font-size:28px">🌆</div>';
+  html += '<div style="flex:1"><div style="font-weight:700;font-size:14px">Evening Delivery</div><div style="font-size:12px;color:var(--text-muted);margin-top:2px">'+(eveningOn?'Currently active':'Currently disabled')+'</div></div>';
+  html += '<button onclick="toggleDeliverySession(1)" class="perm-toggle '+(eveningOn?'on':'off')+'" style="flex-shrink:0"></button>';
+  html += '</div>';
+  html += '</div></div>';
+
   // Brand Settings
   var storedName = "'; try { storedName = localStorage.getItem('gauras_brand_name')||'GauRas'; } catch(e){}; var n='";
   html += '<div class="cp-section" style="margin-bottom:16px">';
@@ -5005,6 +5064,19 @@ function showUserModal(title, username, fullName, role, routeId, isActive) {
     +'</div></div>';
   document.body.insertAdjacentHTML('beforeend', html);
   setTimeout(function(){ var el=document.getElementById('um-user'); if(el&&!el.disabled) el.focus(); },150);
+}
+
+async function toggleDeliverySession(session) {
+  var key = session===0 ? 'morning_delivery_enabled' : 'evening_delivery_enabled';
+  var label = session===0 ? 'Morning' : 'Evening';
+  var current = getSetting(key);
+  var newVal = !current;
+  if (!newVal && !getSetting(session===0?'evening_delivery_enabled':'morning_delivery_enabled')) {
+    return toast('At least one session must be enabled','error');
+  }
+  await saveSetting(key, newVal);
+  toast(label+' delivery '+(newVal?'enabled':'disabled'),'success');
+  renderCPContent();
 }
 
 function saveBrandSettings() {
