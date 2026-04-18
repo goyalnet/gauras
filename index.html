@@ -5196,15 +5196,19 @@ function saveBrandSettings() {
 }
 
 function removeLogo() {
-  try {
-    localStorage.removeItem('gauras_logo');
-    var displayEl = document.getElementById('login-logo-display');
-    if (displayEl) displayEl.innerHTML = '<div class="login-logo-icon" id="login-logo-emoji">🥛</div>';
-    var imgEl = document.querySelector('.sidebar-logo .logo-img');
-    if (imgEl) imgEl.remove();
-    toast('Logo removed','success');
-    renderCPContent();
-  } catch(e){}
+  localStorage.removeItem('gauras_logo');
+  var displayEl = document.getElementById('login-logo-display');
+  if (displayEl) displayEl.innerHTML = '<div class="login-logo-icon" id="login-logo-emoji">&#x1F95B;</div>';
+  var imgEl = document.querySelector('.sidebar-logo .logo-img');
+  if (imgEl) imgEl.remove();
+  // Clear from Supabase too
+  db.get('gs_settings','setting_key=eq.brand_logo').then(function(rows){
+    if (rows && rows.length) {
+      db.update('gs_settings', rows[0].id, { setting_value:'', updated_at: new Date().toISOString() }).catch(function(){});
+    }
+  }).catch(function(){});
+  toast('Logo removed','success');
+  renderCPContent();
 }
 
 function closeUserModal() {
