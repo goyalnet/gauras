@@ -933,7 +933,7 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 });
 
-const PAGE_TITLES = { pausereq:'Pause Requests', registrations:'Customer Registrations', customers:'Customers', routes:'Routes', masters:'Masters', dashboard:'Dashboard', delivery:'Daily Delivery', wallet:'Wallet & Payments', bottles:'Bottle Tracking', reports:'Reports', alerts:'Alerts', control:'Control Panel' };
+const PAGE_TITLES = { pausereq:'Pause Requests', registrations:'Customer Registrations', sessions:'Delivery Sessions', customers:'Customers', routes:'Routes', masters:'Masters', dashboard:'Dashboard', delivery:'Daily Delivery', wallet:'Wallet & Payments', bottles:'Bottle Tracking', reports:'Reports', alerts:'Alerts', control:'Control Panel' };
 
 function go(page) {
   // Check page permission before rendering
@@ -969,6 +969,7 @@ function go(page) {
   else if (page === 'registrations') renderRegistrations();
   else if (page === 'bottles') renderBottleTracking();
   else if (page === 'control') renderControlPanel();
+  else if (page === 'sessions') renderSessionControl();
   else if (page === 'reports') { if(!window._reportTab) window._reportTab='summary'; renderReports(); if(window._reportTab==='summary') loadSummaryData(); else if(window._reportTab==='route') renderRouteStatement(); else loadReportData(); }
   else if (page === 'dashboard') { renderDashboard(); }
   else document.getElementById('content').innerHTML = '<div class="empty"><div class="empty-icon">🚧</div><p>Coming in a future phase.</p></div>';
@@ -4858,6 +4859,68 @@ function checkExistingSession() {
 var _cpUsers = [];
 var _cpPerms = {};
 
+async function renderSessionControl() {
+  var body = document.getElementById('content');
+  // Reload settings fresh from DB
+  try {
+    var rows = await db.get('gs_settings', 'order=setting_key.asc');
+    rows.forEach(function(r){ appSettings[r.setting_key] = r.setting_value; });
+  } catch(e){ toast('Could not load settings: '+e.message,'error'); }
+
+  var morningOn = getSetting('morning_delivery_enabled');
+  var eveningOn = getSetting('evening_delivery_enabled');
+
+  var html = '<div style="max-width:500px;margin:0 auto">';
+
+  // Morning card
+  html += '<div class="card" style="margin-bottom:16px">';
+  html += '<div style="padding:20px;display:flex;align-items:center;gap:16px">';
+  html += '<div style="font-size:40px">🌅</div>';
+  html += '<div style="flex:1">';
+  html += '<div style="font-size:17px;font-weight:700">Morning Delivery</div>';
+  html += '<div style="font-size:13px;color:'+(morningOn?'var(--brand)':'var(--danger)')+';font-weight:600;margin-top:4px">'+(morningOn?'✓ Currently Active':'✗ Currently Disabled')+'</div>';
+  html += '<div style="font-size:12px;color:var(--text-muted);margin-top:4px">Controls morning session across all routes and milkmen</div>';
+  html += '</div>';
+  html += '<button onclick="doToggleSession(0,'+(!morningOn)+')" class="btn '+(morningOn?'btn-danger':'btn-primary')+'" style="white-space:nowrap">'+(morningOn?'Disable':'Enable')+'</button>';
+  html += '</div></div>';
+
+  // Evening card
+  html += '<div class="card" style="margin-bottom:16px">';
+  html += '<div style="padding:20px;display:flex;align-items:center;gap:16px">';
+  html += '<div style="font-size:40px">🌆</div>';
+  html += '<div style="flex:1">';
+  html += '<div style="font-size:17px;font-weight:700">Evening Delivery</div>';
+  html += '<div style="font-size:13px;color:'+(eveningOn?'var(--brand)':'var(--danger)')+';font-weight:600;margin-top:4px">'+(eveningOn?'✓ Currently Active':'✗ Currently Disabled')+'</div>';
+  html += '<div style="font-size:12px;color:var(--text-muted);margin-top:4px">Controls evening session across all routes and milkmen</div>';
+  html += '</div>';
+  html += '<button onclick="doToggleSession(1,'+(!eveningOn)+')" class="btn '+(eveningOn?'btn-danger':'btn-primary')+'" style="white-space:nowrap">'+(eveningOn?'Disable':'Enable')+'</button>';
+  html += '</div></div>';
+
+  html += '<div style="font-size:12px;color:var(--text-hint);text-align:center;padding:8px">Changes take effect immediately for all users</div>';
+  html += '</div>';
+  body.innerHTML = html;
+}
+
+async function doToggleSession(sessionCode, newVal) {
+  var key = sessionCode===0 ? 'morning_delivery_enabled' : 'evening_delivery_enabled';
+  var otherKey = sessionCode===0 ? 'evening_delivery_enabled' : 'morning_delivery_enabled';
+  var label = sessionCode===0 ? 'Morning' : 'Evening';
+  if (!newVal && !getSetting(otherKey)) return toast('At least one session must remain active','error');
+  try {
+    var rows = await db.get('gs_settings','setting_key=eq.'+key);
+    if (rows && rows.length) {
+      await db.update('gs_settings', rows[0].id, { setting_value: newVal?'true':'false', updated_at: new Date().toISOString() });
+    } else {
+      await db.insert('gs_settings', { setting_key: key, setting_value: newVal?'true':'false' });
+    }
+    appSettings[key] = newVal?'true':'false';
+    toast(label+' delivery '+(newVal?'enabled':'disabled'), newVal?'success':'info');
+    // Refresh whichever page is showing
+    if (_currentPage==='sessions') renderSessionControl();
+    else if (_currentPage==='control') renderControlPanel();
+  } catch(e) { toast('Error: '+e.message,'error'); }
+}
+
 async function renderControlPanel() {
   var body = document.getElementById('content');
   body.innerHTML = '<div style="padding:20px;color:var(--text-muted)">Loading...</div>';
@@ -4876,6 +4939,8 @@ async function renderControlPanel() {
 }
 
 function renderCPContent() {
+  var mOn = appSettings['morning_delivery_enabled']==='true';
+  var eOn = appSettings['evening_delivery_enabled']==='true';
   var roles = ['Admin','Manager','Milkman','Customer'];
   var pages = [
     {key:'page_dashboard',label:'Dashboard'},{key:'page_customers',label:'Customers'},
@@ -4920,23 +4985,21 @@ function renderCPContent() {
   var html = '';
 
   // Delivery Session Settings — TOP of page
-  var morningOn = getSetting('morning_delivery_enabled');
-  var eveningOn = getSetting('evening_delivery_enabled');
   html += '<div class="cp-section" style="margin-bottom:16px">';
   html += '<div class="cp-section-title">🕐 Delivery Session Control</div>';
   html += '<div style="padding:12px 16px;background:var(--brand-light);border-bottom:1px solid var(--border);font-size:12px;color:var(--brand-dark)">Enable or disable delivery sessions globally. Disabled sessions are hidden from the milkman delivery screen.</div>';
   html += '<div style="padding:16px;display:flex;gap:16px;flex-wrap:wrap">';
-  html += '<div style="display:flex;align-items:center;gap:14px;padding:16px 20px;background:var(--bg);border-radius:10px;border:2px solid '+(morningOn?'var(--brand)':'var(--border)')+';flex:1;min-width:200px">';
+  html += '<div style="display:flex;align-items:center;gap:14px;padding:16px 20px;background:var(--bg);border-radius:10px;border:2px solid '+(mOn?'var(--brand)':'var(--border)')+';flex:1;min-width:200px">';
   html += '<div style="font-size:32px">🌅</div>';
   html += '<div style="flex:1"><div style="font-weight:700;font-size:15px">Morning Delivery</div>';
-  html += '<div style="font-size:12px;color:'+(morningOn?'var(--brand)':'var(--text-muted)')+';margin-top:3px;font-weight:600">'+(morningOn?'✓ Active':'✗ Disabled')+'</div></div>';
-  html += '<button onclick="toggleDeliverySession(0)" class="perm-toggle '+(morningOn?'on':'off')+'" style="width:48px;height:26px;flex-shrink:0"></button>';
+  html += '<div style="font-size:12px;color:'+(mOn?'var(--brand)':'var(--danger)')+';margin-top:3px;font-weight:600">'+(mOn?'✓ Active':'✗ Disabled')+'</div></div>';
+  html += '<button onclick="doToggleSession(0,'+(!mOn)+')" class="btn btn-sm '+(mOn?'btn-danger':'btn-primary')+'" style="white-space:nowrap">'+(mOn?'Disable':'Enable')+'</button>';
   html += '</div>';
-  html += '<div style="display:flex;align-items:center;gap:14px;padding:16px 20px;background:var(--bg);border-radius:10px;border:2px solid '+(eveningOn?'var(--brand)':'var(--border)')+';flex:1;min-width:200px">';
+  html += '<div style="display:flex;align-items:center;gap:14px;padding:16px 20px;background:var(--bg);border-radius:10px;border:2px solid '+(eOn?'var(--brand)':'var(--border)')+';flex:1;min-width:200px">';
   html += '<div style="font-size:32px">🌆</div>';
   html += '<div style="flex:1"><div style="font-weight:700;font-size:15px">Evening Delivery</div>';
-  html += '<div style="font-size:12px;color:'+(eveningOn?'var(--brand)':'var(--text-muted)')+';margin-top:3px;font-weight:600">'+(eveningOn?'✓ Active':'✗ Disabled')+'</div></div>';
-  html += '<button onclick="toggleDeliverySession(1)" class="perm-toggle '+(eveningOn?'on':'off')+'" style="width:48px;height:26px;flex-shrink:0"></button>';
+  html += '<div style="font-size:12px;color:'+(eOn?'var(--brand)':'var(--danger)')+';margin-top:3px;font-weight:600">'+(eOn?'✓ Active':'✗ Disabled')+'</div></div>';
+  html += '<button onclick="doToggleSession(1,'+(!eOn)+')" class="btn btn-sm '+(eOn?'btn-danger':'btn-primary')+'" style="white-space:nowrap">'+(eOn?'Disable':'Enable')+'</button>';
   html += '</div>';
   html += '</div></div>';
 
@@ -5074,15 +5137,7 @@ function showUserModal(title, username, fullName, role, routeId, isActive) {
 }
 
 async function toggleDeliverySession(session) {
-  var key = session===0 ? 'morning_delivery_enabled' : 'evening_delivery_enabled';
-  var label = session===0 ? 'Morning' : 'Evening';
-  var current = getSetting(key);
-  var newVal = !current;
-  if (!newVal && !getSetting(session===0?'evening_delivery_enabled':'morning_delivery_enabled')) {
-    return toast('At least one session must be enabled','error');
-  }
-  await saveSetting(key, newVal);
-  toast(label+' delivery '+(newVal?'enabled':'disabled'),'success');
+  await doToggleSession(session, !getSetting(session===0?'morning_delivery_enabled':'evening_delivery_enabled'));
   renderCPContent();
 }
 
