@@ -318,6 +318,7 @@
       <div class="nav-label">Configuration</div>
       <div class="nav-item" onclick="go('masters')"><span>⚙️</span> Masters</div>
       <div class="nav-item" id="nav-control" onclick="go('control')" style="display:none"><span>🔐</span> Control Panel</div>
+      <div class="nav-item" id="nav-sessions" onclick="go('sessions')" style="display:none"><span>🕐</span> Sessions</div>
     </div>
   </aside>
   <div class="main">
@@ -4790,6 +4791,8 @@ function onLoginSuccess() {
   // Show control panel nav only for Admin
   var cpNav = document.getElementById('nav-control');
   if (cpNav) cpNav.style.display = _session.role==='Admin' ? 'flex' : 'none';
+  var sessNav = document.getElementById('nav-sessions');
+  if (sessNav) sessNav.style.display = _session.role==='Admin' ? 'flex' : 'none';
   // Boot and go to first allowed page
   boot();
 }
