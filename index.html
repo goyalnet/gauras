@@ -4919,6 +4919,27 @@ function renderCPContent() {
 
   var html = '';
 
+  // Delivery Session Settings — TOP of page
+  var morningOn = getSetting('morning_delivery_enabled');
+  var eveningOn = getSetting('evening_delivery_enabled');
+  html += '<div class="cp-section" style="margin-bottom:16px">';
+  html += '<div class="cp-section-title">🕐 Delivery Session Control</div>';
+  html += '<div style="padding:12px 16px;background:var(--brand-light);border-bottom:1px solid var(--border);font-size:12px;color:var(--brand-dark)">Enable or disable delivery sessions globally. Disabled sessions are hidden from the milkman delivery screen.</div>';
+  html += '<div style="padding:16px;display:flex;gap:16px;flex-wrap:wrap">';
+  html += '<div style="display:flex;align-items:center;gap:14px;padding:16px 20px;background:var(--bg);border-radius:10px;border:2px solid '+(morningOn?'var(--brand)':'var(--border)')+';flex:1;min-width:200px">';
+  html += '<div style="font-size:32px">🌅</div>';
+  html += '<div style="flex:1"><div style="font-weight:700;font-size:15px">Morning Delivery</div>';
+  html += '<div style="font-size:12px;color:'+(morningOn?'var(--brand)':'var(--text-muted)')+';margin-top:3px;font-weight:600">'+(morningOn?'✓ Active':'✗ Disabled')+'</div></div>';
+  html += '<button onclick="toggleDeliverySession(0)" class="perm-toggle '+(morningOn?'on':'off')+'" style="width:48px;height:26px;flex-shrink:0"></button>';
+  html += '</div>';
+  html += '<div style="display:flex;align-items:center;gap:14px;padding:16px 20px;background:var(--bg);border-radius:10px;border:2px solid '+(eveningOn?'var(--brand)':'var(--border)')+';flex:1;min-width:200px">';
+  html += '<div style="font-size:32px">🌆</div>';
+  html += '<div style="flex:1"><div style="font-weight:700;font-size:15px">Evening Delivery</div>';
+  html += '<div style="font-size:12px;color:'+(eveningOn?'var(--brand)':'var(--text-muted)')+';margin-top:3px;font-weight:600">'+(eveningOn?'✓ Active':'✗ Disabled')+'</div></div>';
+  html += '<button onclick="toggleDeliverySession(1)" class="perm-toggle '+(eveningOn?'on':'off')+'" style="width:48px;height:26px;flex-shrink:0"></button>';
+  html += '</div>';
+  html += '</div></div>';
+
   // Permission Matrix
   html += '<div class="cp-section">';
   html += '<div class="cp-section-title">Permission Matrix <span style="font-size:12px;color:var(--text-muted);font-weight:400">— click toggles to change access per role</span></div>';
@@ -4930,25 +4951,6 @@ function renderCPContent() {
   html += permSection('Features', features);
   html += '<div style="padding:12px 16px;border-top:1px solid var(--border);display:flex;justify-content:flex-end">';
   html += '<button class="btn btn-primary" onclick="saveAllPerms()">Save Permissions</button>';
-  html += '</div></div>';
-
-  // Delivery Session Settings
-  var morningOn = getSetting('morning_delivery_enabled');
-  var eveningOn = getSetting('evening_delivery_enabled');
-  html += '<div class="cp-section" style="margin-bottom:16px">';
-  html += '<div class="cp-section-title">Delivery Session Control</div>';
-  html += '<div style="padding:12px 16px;background:var(--brand-light);border-bottom:1px solid var(--border);font-size:12px;color:var(--brand-dark)">Enable or disable delivery sessions globally. Disabled sessions are hidden from milkman delivery screen and reports.</div>';
-  html += '<div style="padding:16px;display:flex;gap:24px;flex-wrap:wrap">';
-  html += '<div style="display:flex;align-items:center;gap:14px;padding:14px 18px;background:var(--bg);border-radius:10px;border:1px solid var(--border);flex:1;min-width:200px">';
-  html += '<div style="font-size:28px">🌅</div>';
-  html += '<div style="flex:1"><div style="font-weight:700;font-size:14px">Morning Delivery</div><div style="font-size:12px;color:var(--text-muted);margin-top:2px">'+(morningOn?'Currently active':'Currently disabled')+'</div></div>';
-  html += '<button onclick="toggleDeliverySession(0)" class="perm-toggle '+(morningOn?'on':'off')+'" style="flex-shrink:0"></button>';
-  html += '</div>';
-  html += '<div style="display:flex;align-items:center;gap:14px;padding:14px 18px;background:var(--bg);border-radius:10px;border:1px solid var(--border);flex:1;min-width:200px">';
-  html += '<div style="font-size:28px">🌆</div>';
-  html += '<div style="flex:1"><div style="font-weight:700;font-size:14px">Evening Delivery</div><div style="font-size:12px;color:var(--text-muted);margin-top:2px">'+(eveningOn?'Currently active':'Currently disabled')+'</div></div>';
-  html += '<button onclick="toggleDeliverySession(1)" class="perm-toggle '+(eveningOn?'on':'off')+'" style="flex-shrink:0"></button>';
-  html += '</div>';
   html += '</div></div>';
 
   // Brand Settings
