@@ -312,6 +312,7 @@
       <div class="nav-item" onclick="go('reports')"><span>📋</span> Reports</div>
       <div class="nav-item" onclick="go('alerts')"><span>🔔</span> Alerts</div>
       <div class="nav-item" onclick="go('pausereq')"><span>⏸️</span> Pause Requests</div>
+      <div class="nav-item" onclick="go('registrations')"><span>📝</span> Registrations</div>
     </div>
     <div class="nav-group">
       <div class="nav-label">Configuration</div>
@@ -927,7 +928,7 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 });
 
-const PAGE_TITLES = { pausereq:'Pause Requests', customers:'Customers', routes:'Routes', masters:'Masters', dashboard:'Dashboard', delivery:'Daily Delivery', wallet:'Wallet & Payments', bottles:'Bottle Tracking', reports:'Reports', alerts:'Alerts', control:'Control Panel' };
+const PAGE_TITLES = { pausereq:'Pause Requests', registrations:'Customer Registrations', customers:'Customers', routes:'Routes', masters:'Masters', dashboard:'Dashboard', delivery:'Daily Delivery', wallet:'Wallet & Payments', bottles:'Bottle Tracking', reports:'Reports', alerts:'Alerts', control:'Control Panel' };
 
 function go(page) {
   // Check page permission before rendering
@@ -960,6 +961,7 @@ function go(page) {
   else if (page === 'delivery') renderDelivery();
   else if (page === 'alerts') renderAlerts();
   else if (page === 'pausereq') renderPauseRequests();
+  else if (page === 'registrations') renderRegistrations();
   else if (page === 'bottles') renderBottleTracking();
   else if (page === 'control') renderControlPanel();
   else if (page === 'reports') { if(!window._reportTab) window._reportTab='summary'; renderReports(); if(window._reportTab==='summary') loadSummaryData(); else if(window._reportTab==='route') renderRouteStatement(); else loadReportData(); }
@@ -5101,6 +5103,147 @@ async function saveResetPassword() {
 // ══════════════════════════════════════
 // PAUSE REQUESTS (from Customer App)
 // ══════════════════════════════════════
+async function renderRegistrations() {
+  var body = document.getElementById('content');
+  body.innerHTML = '<div style="padding:20px;color:var(--text-muted)">Loading...</div>';
+  var regs = [];
+  try { regs = await db.get('gs_registrations','order=requested_at.desc'); } catch(e){}
+
+  var pending = regs.filter(function(r){ return r.status==='Pending'; });
+  var reviewed = regs.filter(function(r){ return r.status!=='Pending'; });
+
+  var html = '';
+
+  // Summary
+  html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px">';
+  html += dashStat('Pending', pending.length, pending.length>0?'var(--accent)':'var(--text-hint)', 'needs review');
+  html += dashStat('Approved', regs.filter(function(r){ return r.status==='Approved';}).length, 'var(--brand)', '');
+  html += dashStat('Rejected', regs.filter(function(r){ return r.status==='Rejected';}).length, 'var(--danger)', '');
+  html += '</div>';
+
+  // Pending registrations
+  if (pending.length > 0) {
+    html += '<div class="card" style="margin-bottom:14px;border-left:4px solid var(--accent)">';
+    html += '<div class="card-header"><div class="card-title" style="color:var(--accent)">📝 Pending Registrations ('+pending.length+')</div></div>';
+    pending.forEach(function(r){
+      var rt = routes.find(function(x){ return x.id===r.preferred_route_id; });
+      html += '<div style="padding:14px 18px;border-bottom:1px solid var(--border)">';
+      html += '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">';
+      html += '<div style="flex:1">';
+      html += '<div style="font-weight:700;font-size:15px">'+esc(r.first_name||'')+' '+esc(r.last_name||'')+'</div>';
+      html += '<div style="font-size:13px;color:var(--text-muted);margin-top:4px">📱 '+esc(r.phone||'');
+      if (r.whatsapp && r.whatsapp!==r.phone) html += ' &middot; WA: '+esc(r.whatsapp);
+      html += '</div>';
+      if (r.building_name||r.street||r.city) html += '<div style="font-size:12px;color:var(--text-hint);margin-top:2px">📍 '+esc([r.building_name,r.street,r.city].filter(Boolean).join(', '))+'</div>';
+      html += '<div style="font-size:12px;margin-top:6px;display:flex;gap:12px">';
+      html += '<span style="color:var(--brand);font-weight:600">🌅 '+( r.morning_qty||0)+'L morning</span>';
+      html += '<span style="color:var(--brand);font-weight:600">🌆 '+(r.evening_qty||0)+'L evening</span>';
+      html += '</div>';
+      if (r.notes) html += '<div style="font-size:12px;color:var(--text-muted);margin-top:4px;font-style:italic">'+esc(r.notes)+'</div>';
+      html += '<div style="font-size:11px;color:var(--text-hint);margin-top:6px">Requested: '+fmtDate(r.requested_at)+'</div>';
+      html += '</div>';
+      html += '<div style="display:flex;flex-direction:column;gap:8px;min-width:160px">';
+      // Route selector for approval
+      html += '<select class="flt" id="reg-route-'+r.id+'" style="font-size:12px;padding:6px 8px;border:1px solid var(--border);border-radius:7px;background:#fff">';
+      html += '<option value="">Assign Route</option>';
+      routes.forEach(function(rt2){ html += '<option value="'+rt2.id+'">'+esc(rt2.name)+'</option>'; });
+      html += '</select>';
+      html += '<button class="btn btn-primary btn-sm" onclick="approveRegistration('+r.id+')">✓ Approve</button>';
+      html += '<button class="btn btn-danger btn-sm" onclick="rejectRegistration('+r.id+')">✗ Reject</button>';
+      html += '</div>';
+      html += '</div></div>';
+    });
+    html += '</div>';
+  } else {
+    html += '<div class="card" style="margin-bottom:14px"><div class="empty"><div class="empty-icon">✅</div><p>No pending registrations.</p></div></div>';
+  }
+
+  // Reviewed
+  if (reviewed.length > 0) {
+    html += '<div class="card">';
+    html += '<div class="card-header"><div class="card-title">Reviewed Registrations</div></div>';
+    html += '<div class="tbl-wrap"><table><thead><tr><th>Name</th><th>Phone</th><th>Qty</th><th>Status</th><th>Reviewed</th></tr></thead><tbody>';
+    reviewed.slice(0,20).forEach(function(r){
+      html += '<tr>'
+        +'<td>'+esc(r.first_name||'')+' '+esc(r.last_name||'')+'</td>'
+        +'<td>'+esc(r.phone||'')+'</td>'
+        +'<td style="font-size:12px">'+( r.morning_qty||0)+'L+'+(r.evening_qty||0)+'L</td>'
+        +'<td><span class="badge badge-'+(r.status==='Approved'?'Active':'Stopped')+'">'+esc(r.status)+'</span></td>'
+        +'<td style="font-size:12px;color:var(--text-hint)">'+fmtDate(r.reviewed_at)+'</td>'
+        +'</tr>';
+    });
+    html += '</tbody></table></div></div>';
+  }
+
+  body.innerHTML = html;
+}
+
+async function approveRegistration(regId) {
+  var routeEl = document.getElementById('reg-route-'+regId);
+  var routeId = routeEl ? (parseInt(routeEl.value)||null) : null;
+  if (!routeId) return toast('Please assign a route before approving','error');
+
+  var regs = await db.get('gs_registrations','id=eq.'+regId);
+  if (!regs || !regs.length) return toast('Registration not found','error');
+  var r = regs[0];
+
+  if (!confirm('Approve registration for '+r.first_name+' '+( r.last_name||'')+' and create customer account?')) return;
+
+  try {
+    // Create customer record
+    var today = todayStr();
+    var custRes = await db.insert('gs_customers', {
+      first_name: r.first_name,
+      last_name: r.last_name || null,
+      phone: r.phone,
+      whatsapp: r.whatsapp || null,
+      building_name: r.building_name || null,
+      street: r.street || null,
+      city: r.city || null,
+      route_id: routeId,
+      morning_quota: r.morning_qty || 0,
+      evening_quota: r.evening_qty || 0,
+      delivery_notes: r.notes || null,
+      status: 'Active',
+      joining_date: today,
+      payment_mode: 'Cash',
+      grace_days: 3,
+      schedule_type: 'Daily',
+      delivery_sequence: 999
+    });
+
+    var newCustId = custRes[0].id;
+    customers.push(custRes[0]);
+
+    // Create wallet
+    await db.insert('gs_wallets', { customer_id: newCustId, balance: 0 });
+
+    // Mark registration as approved
+    await db.update('gs_registrations', regId, {
+      status: 'Approved',
+      reviewed_at: new Date().toISOString(),
+      reviewed_by: _session ? (_session.user.full_name||_session.user.username) : 'Admin',
+      customer_id: newCustId
+    });
+
+    toast(r.first_name+' approved and added as customer!','success');
+    renderRegistrations();
+  } catch(e) { toast('Error: '+e.message,'error'); }
+}
+
+async function rejectRegistration(regId) {
+  if (!confirm('Reject this registration request?')) return;
+  try {
+    await db.update('gs_registrations', regId, {
+      status: 'Rejected',
+      reviewed_at: new Date().toISOString(),
+      reviewed_by: _session ? (_session.user.full_name||_session.user.username) : 'Admin'
+    });
+    toast('Registration rejected','success');
+    renderRegistrations();
+  } catch(e) { toast('Error: '+e.message,'error'); }
+}
+
 async function renderPauseRequests() {
   var body = document.getElementById('content');
   body.innerHTML = '<div style="padding:20px;color:var(--text-muted)">Loading...</div>';
