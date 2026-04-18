@@ -317,7 +317,7 @@
     <div class="nav-group">
       <div class="nav-label">Configuration</div>
       <div class="nav-item" onclick="go('masters')"><span>⚙️</span> Masters</div>
-      <div class="nav-item" id="nav-control" onclick="go('control')" style="display:none"><span>🔐</span> Control Panel</div>↵      <div class="nav-item" id="nav-sessions" onclick="go('sessions')"><span>🕐</span> Sessions</div>
+      <div class="nav-item" id="nav-control" onclick="go('control')" style="display:none"><span>🔐</span> Control Panel</div>
       <div class="nav-item" id="nav-sessions" onclick="go('sessions')"><span>🕐</span> Sessions</div>
     </div>
   </aside>
@@ -1376,6 +1376,7 @@ function renderMasters() {
   if (mastersTab === 'rate') renderRateMaster();
   else if (mastersTab === 'customer') renderCustomerMaster();
   else if (mastersTab === 'route') renderRouteMaster();
+  else if (mastersTab === 'sessions') renderSessionsTab();
 }
 
 function buildMastersTabs() {
@@ -1390,7 +1391,8 @@ function buildMastersTabs() {
     tabEl.innerHTML =
       '<div class="tab'+(mastersTab==='rate'?' active':'')+'" onclick="setMastersTab(0)">Rate Master</div>'
       + '<div class="tab'+(mastersTab==='customer'?' active':'')+'" onclick="setMastersTab(1)">Customer Master</div>'
-      + '<div class="tab'+(mastersTab==='route'?' active':'')+'" onclick="setMastersTab(2)">Route Master</div>';
+      + '<div class="tab'+(mastersTab==='route'?' active':'')+'" onclick="setMastersTab(2)">Route Master</div>'
+      + '<div class="tab'+(mastersTab==='sessions'?' active':'')+'" onclick="setMastersTab(3)">🕐 Sessions</div>';
   }
 }
 
@@ -1406,8 +1408,34 @@ function confirmDelRoute(id) {
 }
 
 function setMastersTab(t) {
-  mastersTab = t===0?'rate':t===1?'customer':'route';
+  mastersTab = t===0?'rate':t===1?'customer':t===2?'route':'sessions';
   renderMasters();
+}
+
+async function renderSessionsTab() {
+  try {
+    var rows = await db.get('gs_settings','order=setting_key.asc');
+    rows.forEach(function(r){ appSettings[r.setting_key]=r.setting_value; });
+  } catch(e){}
+  var mOn = appSettings['morning_delivery_enabled']==='true';
+  var eOn = appSettings['evening_delivery_enabled']==='true';
+  var b = getMastersBody();
+  if (!b) return;
+  var html = '<div style="max-width:500px;margin:16px auto">';
+  html += '<div style="font-size:13px;color:var(--text-muted);margin-bottom:16px">Enable or disable delivery sessions globally across all routes and milkmen.</div>';
+  html += '<div class="card" style="margin-bottom:12px"><div style="padding:18px 20px;display:flex;align-items:center;gap:16px">';
+  html += '<div style="font-size:36px">🌅</div>';
+  html += '<div style="flex:1"><div style="font-size:16px;font-weight:700">Morning Delivery</div>';
+  html += '<div style="font-size:13px;font-weight:600;margin-top:4px;color:'+(mOn?'var(--brand)':'var(--danger)')+'">'+(mOn?'✓ Active':'✗ Disabled')+'</div></div>';
+  html += '<button class="btn '+(mOn?'btn-danger':'btn-primary')+'" onclick="doToggleSession(0,'+(!mOn)+')">'+(mOn?'Disable':'Enable')+'</button>';
+  html += '</div></div>';
+  html += '<div class="card"><div style="padding:18px 20px;display:flex;align-items:center;gap:16px">';
+  html += '<div style="font-size:36px">🌆</div>';
+  html += '<div style="flex:1"><div style="font-size:16px;font-weight:700">Evening Delivery</div>';
+  html += '<div style="font-size:13px;font-weight:600;margin-top:4px;color:'+(eOn?'var(--brand)':'var(--danger)')+'">'+(eOn?'✓ Active':'✗ Disabled')+'</div></div>';
+  html += '<button class="btn '+(eOn?'btn-danger':'btn-primary')+'" onclick="doToggleSession(1,'+(!eOn)+')">'+(eOn?'Disable':'Enable')+'</button>';
+  html += '</div></div></div>';
+  b.innerHTML = html;
 }
 
 function getMastersBody() {
@@ -4921,6 +4949,7 @@ async function doToggleSession(sessionCode, newVal) {
     // Refresh whichever page is showing
     if (_currentPage==='sessions') renderSessionControl();
     else if (_currentPage==='control') renderControlPanel();
+    else if (_currentPage==='masters' && mastersTab==='sessions') renderSessionsTab();
   } catch(e) { toast('Error: '+e.message,'error'); }
 }
 
