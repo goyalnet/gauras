@@ -776,6 +776,8 @@ async function boot() {
   try { bottleLogs = await db.get('gs_bottle_log', 'log_date=eq.'+todayStr()); } catch(e) { bottleLogs = []; }
   try { topups     = await db.get('gs_topups',   'order=topup_date.desc'); } catch(e) { topups = []; }
   // Navigate to first allowed page
+  // Load WhatsApp settings
+  await loadWASettings();
   var firstPage = 'dashboard';
   if (!can('page_dashboard')) {
     if (can('page_delivery')) firstPage = 'delivery';
@@ -2581,14 +2583,16 @@ async function saveTopup() {
     var w2 = wallets.find(function(x){ return String(x.customer_id)===String(walletCustId); });
     if (w2) newBal2 = w2.balance||0;
     if (wa && c2) {
-      var receiptMsg = 'Dear+'+encodeURIComponent(c2.first_name||'')
-        +',+Payment+of+Rs.'+amount+'+received+on+'+fmtDate(date).replace(/ /g,'+')+'.'
-        +'+Mode:+'+(topupData.payment_mode||'Cash')+'.'
-        +'+New+balance:+Rs.'+newBal2.toFixed(0)+'.'
-        +'+Thank+you%21+GauRas+Milk.';
-      var waUrl = 'https://wa.me/91'+wa+'?text='+receiptMsg;
-      if (confirm('Top-up saved! Send WhatsApp receipt to '+c2.first_name+'?')) {
-        window.open(waUrl, '_blank');
+      var brandName3 = localStorage.getItem('gauras_brand_name') || appSettings['brand_name'] || 'GauRas Milk';
+      var receiptMsg2 = waMsgTopupReceipt(c2.first_name||'', amount, newBal2.toFixed(0), fmtDate(date), topupData.payment_mode||'Cash', brandName3);
+      if (waSettings.enabled) {
+        // Auto-send via API
+        sendWhatsApp(wa, receiptMsg2);
+      } else {
+        // Ask before opening WA
+        if (confirm('Top-up saved! Send WhatsApp receipt to '+c2.first_name+'?')) {
+          sendWhatsApp(wa, receiptMsg2);
+        }
       }
     }
 
@@ -5084,6 +5088,31 @@ function renderCPContent() {
   html += (localStorage.getItem('gauras_logo')?' <button class="btn btn-danger btn-sm" onclick="removeLogo()">Remove Logo</button>':'');
   html += '</div></div></div>';
 
+  // WhatsApp Settings
+  html += '<div class="cp-section" style="margin-bottom:16px">';
+  html += '<div class="cp-section-title">WhatsApp Messaging Settings</div>';
+  html += '<div style="padding:12px 16px;background:var(--brand-light);border-bottom:1px solid var(--border);font-size:12px;color:var(--brand-dark)">Configure WhatsApp Business API for automatic messaging. Until configured, messages open WhatsApp directly for manual send.</div>';
+  html += '<div style="padding:16px;display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">';
+  html += '<div style="display:flex;align-items:center;gap:10px;width:100%;padding-bottom:12px;border-bottom:1px solid var(--border);margin-bottom:4px">';
+  html += '<div style="flex:1"><div style="font-weight:600">Auto-send via API</div><div style="font-size:12px;color:var(--text-muted)">When enabled, messages send automatically without opening WhatsApp</div></div>';
+  html += '<button onclick="doToggleWA()" class="perm-toggle '+(waSettings.enabled?'on':'off')+'" style="width:48px;height:26px;flex-shrink:0"></button>';
+  html += '</div>';
+  html += '<div style="width:100%"><label class="flabel" style="display:block;margin-bottom:5px">Provider</label>';
+  html += '<select class="fcontrol" id="wa-provider" style="max-width:200px"><option value="">-- Select Provider --</option>';
+  html += '<option value="interakt"'+(waSettings.provider==='interakt'?' selected':'')+'>Interakt</option>';
+  html += '<option value="wati"'+(waSettings.provider==='wati'?' selected':'')+'>Wati</option>';
+  html += '<option value="aisensy"'+(waSettings.provider==='aisensy'?' selected':'')+'>AiSensy</option>';
+  html += '<option value="gupshup"'+(waSettings.provider==='gupshup'?' selected':'')+'>Gupshup</option>';
+  html += '</select></div>';
+  html += '<div style="flex:1;min-width:280px"><label class="flabel" style="display:block;margin-bottom:5px">API Key</label>';
+  html += '<input class="fcontrol" id="wa-apikey" type="password" placeholder="Paste your API key here" value="'+esc(waSettings.apiKey||'')+'"></div>';
+  html += '<div style="min-width:180px"><label class="flabel" style="display:block;margin-bottom:5px">Sender Number (for Gupshup)</label>';
+  html += '<input class="fcontrol" id="wa-sender" placeholder="e.g. 919876543210" value="'+esc(waSettings.senderNumber||'')+'"></div>';
+  html += '<div><button class="btn btn-primary" onclick="saveWASettings()">Save WA Settings</button>';
+  html += (waSettings.apiKey?'<button class="btn btn-outline" style="margin-left:8px" onclick="testWAMessage()">Test Message</button>':'');
+  html += '</div>';
+  html += '</div></div>';
+
   // User Management
   html += '<div class="cp-section">';
   html += '<div class="cp-section-title" style="display:flex;align-items:center;justify-content:space-between">User Management <button class="btn btn-primary btn-sm" onclick="openAddUser()">+ Add User</button></div>';
@@ -5218,6 +5247,36 @@ function removeLogo() {
   }).catch(function(){});
   toast('Logo removed','success');
   renderCPContent();
+}
+
+async function doToggleWA() {
+  waSettings.enabled = !waSettings.enabled;
+  await saveSetting('wa_api_enabled', waSettings.enabled);
+  toast('Auto WhatsApp '+(waSettings.enabled?'enabled':'disabled'), 'success');
+  renderCPContent();
+}
+
+async function saveWASettings() {
+  var provider = (document.getElementById('wa-provider').value||'').trim();
+  var apiKey   = (document.getElementById('wa-apikey').value||'').trim();
+  var sender   = (document.getElementById('wa-sender').value||'').trim();
+  try {
+    await saveSetting('wa_api_provider', provider);
+    await saveSetting('wa_api_key', apiKey);
+    await saveSetting('wa_sender_number', sender);
+    waSettings.provider = provider;
+    waSettings.apiKey = apiKey;
+    waSettings.senderNumber = sender;
+    toast('WhatsApp settings saved!','success');
+    renderCPContent();
+  } catch(e) { toast('Error: '+e.message,'error'); }
+}
+
+async function testWAMessage() {
+  var testPhone = prompt('Enter a phone number to test (10 digits):');
+  if (!testPhone) return;
+  var brand = localStorage.getItem('gauras_brand_name')||'GauRas Milk';
+  await sendWhatsApp(testPhone, 'This is a test message from '+brand+'. WhatsApp integration is working!');
 }
 
 function closeUserModal() {
@@ -5423,17 +5482,12 @@ async function approveRegistration(regId) {
 
     toast(r.first_name+' approved and added as customer!','success');
     // Send WhatsApp notification
-    var wa = (r.whatsapp||r.phone||'').replace(/[^0-9]/g,'');
-    if (wa) {
-      var custUrl = 'gauras-customer.pages.dev';
-      var msg = 'Dear+'+encodeURIComponent(r.first_name||'')+
-        ',+your+milk+delivery+registration+with+'+encodeURIComponent(localStorage.getItem('gauras_brand_name')||'our dairy')+
-        '+has+been+approved!+'+
-        'You+can+now+login+at+'+encodeURIComponent(custUrl)+
-        '+using+your+registered+mobile+number+and+set+your+PIN.+'+
-        'Please+top+up+your+wallet+to+start+delivery.+Welcome!';
-      var waUrl = 'https://wa.me/91'+wa+'?text='+msg;
-      setTimeout(function(){ window.open(waUrl,'_blank'); }, 500);
+    var wa2 = (r.whatsapp||r.phone||'');
+    if (wa2) {
+      var brandName2 = localStorage.getItem('gauras_brand_name') || appSettings['brand_name'] || 'our dairy';
+      var custUrl2 = 'gauras-customer.pages.dev';
+      var regMsg = waMsgRegistrationApproved(r.first_name||'', brandName2, custUrl2);
+      setTimeout(function(){ sendWhatsApp(wa2, regMsg); }, 500);
     }
     renderRegistrations();
   } catch(e) { toast('Error: '+e.message,'error'); }
