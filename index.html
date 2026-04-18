@@ -4997,10 +4997,14 @@ async function doToggleSession(sessionCode, newVal) {
 async function renderControlPanel() {
   var body = document.getElementById('content');
   body.innerHTML = '<div style="padding:20px;color:var(--text-muted)">Loading...</div>';
-  // Load ALL data before rendering \u2014 settings MUST be loaded first
+  // Load ALL data before rendering
   try {
     var settingRows = await db.get('gs_settings','order=setting_key.asc');
     settingRows.forEach(function(s){ appSettings[s.setting_key] = s.setting_value; });
+    waSettings.enabled = appSettings['wa_api_enabled']==='true';
+    waSettings.provider = appSettings['wa_api_provider']||'';
+    waSettings.apiKey = appSettings['wa_api_key']||'';
+    waSettings.senderNumber = appSettings['wa_sender_number']||'';
   } catch(e){ console.log('settings error',e); }
   try { _cpUsers = await db.get('gs_users','order=role.asc,username.asc'); } catch(e){ _cpUsers=[]; }
   try {
@@ -5008,7 +5012,6 @@ async function renderControlPanel() {
     _cpPerms = {};
     rows.forEach(function(r){ if(!_cpPerms[r.role]) _cpPerms[r.role]={}; _cpPerms[r.role][r.permission_key]=r.allowed; });
   } catch(e){}
-  // Now safe to render \u2014 appSettings is populated
   renderCPContent();
 }
 
