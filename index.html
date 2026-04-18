@@ -1812,6 +1812,15 @@ function confirmDel(type,id,name) {
 async function doDel(type,id) {
   try {
     if(type==='customer') {
+      // Check if customer has an approved registration — prevent deletion
+      try {
+        var regCheck = await db.get('gs_registrations','customer_id=eq.'+id+'&status=eq.Approved');
+        if (regCheck && regCheck.length > 0) {
+          closeM('confirm-modal');
+          toast('Cannot delete — this customer was registered through the customer app. Reject their registration first from the Registrations page.','error');
+          return;
+        }
+      } catch(e){}
       await db.del('gs_customers',id); customers=customers.filter(c=>c.id!==id);
       closeM('confirm-modal'); toast('Customer deleted','success'); if(mastersTab==='customer') renderMasters(); else renderCustomers();
     } else {
