@@ -726,6 +726,48 @@
 </div>
 
 <script>
+// ── WASETTINGS (declared early for use throughout) ──
+var waSettings = { enabled:false, provider:'', apiKey:'', senderNumber:'' };
+
+function waMsgRegistrationApproved(name, brand, url) {
+  return 'Dear '+name+', your milk delivery registration with '+brand+' has been approved! Login at '+url+' using your mobile number, set your PIN, and top up your wallet to start delivery. Welcome!';
+}
+function waMsgLowBalance(name, balance, days, brand) {
+  return 'Dear '+name+', your milk wallet balance with '+brand+' is Rs.'+balance+' with '+days+' days remaining. Please top up to continue uninterrupted delivery.';
+}
+function waMsgTopupReceipt(name, amount, newBal, date, mode, brand) {
+  return 'Dear '+name+', payment of Rs.'+amount+' received on '+date+' via '+mode+'. New wallet balance: Rs.'+newBal+'. Thank you! '+brand+'.';
+}
+async function loadWASettings() {
+  try {
+    var rows = await db.get('gs_settings','setting_key=in.(wa_api_enabled,wa_api_provider,wa_api_key,wa_sender_number)');
+    rows.forEach(function(r){
+      if (r.setting_key==='wa_api_enabled') waSettings.enabled = r.setting_value==='true';
+      if (r.setting_key==='wa_api_provider') waSettings.provider = r.setting_value||'';
+      if (r.setting_key==='wa_api_key') waSettings.apiKey = r.setting_value||'';
+      if (r.setting_key==='wa_sender_number') waSettings.senderNumber = r.setting_value||'';
+    });
+  } catch(e){}
+}
+async function sendWhatsApp(phone, message) {
+  var cleanPhone = (phone||'').replace(/[^0-9]/g,'');
+  if (!cleanPhone) return false;
+  if (cleanPhone.length===10) cleanPhone = '91'+cleanPhone;
+  if (waSettings.enabled && waSettings.apiKey && waSettings.provider) {
+    try { var sent = await sendWAViaAPI(cleanPhone, message); if (sent) { toast('WhatsApp message sent','success'); return true; } } catch(e){}
+  }
+  window.open('https://wa.me/'+cleanPhone+'?text='+encodeURIComponent(message),'_blank');
+  return false;
+}
+async function sendWAViaAPI(phone, message) {
+  var p = waSettings.provider.toLowerCase();
+  if (p==='interakt') { var r=await fetch('https://api.interakt.ai/v1/public/message/',{method:'POST',headers:{'Authorization':'Basic '+waSettings.apiKey,'Content-Type':'application/json'},body:JSON.stringify({countryCode:'+91',phoneNumber:phone.replace(/^91/,''),type:'Text',data:{message:message}})}); var d=await r.json(); return d.result||d.success||r.ok; }
+  if (p==='wati') { var r2=await fetch('https://live-server.wati.io/api/v1/sendSessionMessage/'+phone+'?messageText='+encodeURIComponent(message),{method:'POST',headers:{'Authorization':'Bearer '+waSettings.apiKey}}); return r2.ok; }
+  if (p==='aisensy') { var r3=await fetch('https://backend.aisensy.com/campaign/t1/api',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({apiKey:waSettings.apiKey,campaignName:'GauRas',destination:phone,userName:'GauRas',templateParams:[message]})}); return r3.ok; }
+  if (p==='gupshup') { var r4=await fetch('https://api.gupshup.io/sm/api/v1/msg',{method:'POST',headers:{'apikey':waSettings.apiKey,'Content-Type':'application/x-www-form-urlencoded'},body:'channel=whatsapp&source='+waSettings.senderNumber+'&destination='+phone+'&message='+encodeURIComponent(message)+'&src.name=GauRas'}); return r4.ok; }
+  throw new Error('Unknown provider');
+}
+
 const SB_URL = 'https://plqujrordybzncvvkqgg.supabase.co';
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBscXVqcm9yZHliem5jdnZrcWdnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUzMTQyOTMsImV4cCI6MjA5MDg5MDI5M30.MOmPuTwzoRBteAUCKbdPqOlS0zgWiRgERMZr2FzyyZA';
 
