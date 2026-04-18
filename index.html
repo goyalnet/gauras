@@ -911,14 +911,25 @@ function handleLogoUpload(input) {
   var file = input.files[0];
   if (!file) return;
   if (!file.type.startsWith('image/')) return toast('Please select an image file','error');
-  if (file.size > 500000) return toast('Image too large \u2014 please use an image under 500KB','error');
+  if (file.size > 300000) return toast('Image too large - please use an image under 300KB','error');
   var reader = new FileReader();
   reader.onload = function(e) {
     var dataUrl = e.target.result;
-    // Save to localStorage
-    try { localStorage.setItem('gauras_logo', dataUrl); } catch(err) { toast('Could not save logo','error'); return; }
-    applyStoredLogo();
-    toast('Logo uploaded and saved!','success');
+    try { localStorage.setItem('gauras_logo', dataUrl); } catch(err){}
+    toast('Saving logo...','info');
+    db.get('gs_settings','setting_key=eq.brand_logo').then(function(rows){
+      if (rows && rows.length > 0) {
+        return db.update('gs_settings', rows[0].id, { setting_value: dataUrl, updated_at: new Date().toISOString() });
+      } else {
+        return db.insert('gs_settings', { setting_key: 'brand_logo', setting_value: dataUrl });
+      }
+    }).then(function(){
+      applyStoredLogo();
+      toast('Logo saved to all devices!','success');
+    }).catch(function(err){
+      applyStoredLogo();
+      toast('Logo saved locally. Supabase error: '+err.message,'error');
+    });
   };
   reader.readAsDataURL(file);
 }
