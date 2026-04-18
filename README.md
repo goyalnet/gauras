@@ -1,2 +1,0 @@
-# gauras
-milk distribution app
