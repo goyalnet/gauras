@@ -5337,15 +5337,27 @@ async function toggleDeliverySession(session) {
   renderCPContent();
 }
 
-function saveBrandSettings() {
-  var name = (document.getElementById('cp-brand-name').value||'').trim() || '';
+async function saveBrandSettings() {
+  var name = (document.getElementById('cp-brand-name').value||'').trim();
   var sub = (document.getElementById('cp-brand-sub').value||'').trim();
   try {
+    // Save to localStorage
     localStorage.setItem('gauras_brand_name', name);
     localStorage.setItem('gauras_brand_sub', sub);
+    // Save to Supabase
+    var rows = await db.get('gs_settings','setting_key=in.(brand_name,brand_sub)');
+    var nameRow = rows.find(function(r){ return r.setting_key==='brand_name'; });
+    var subRow  = rows.find(function(r){ return r.setting_key==='brand_sub'; });
+    if (nameRow) await db.update('gs_settings', nameRow.id, { setting_value: name, updated_at: new Date().toISOString() });
+    else await db.insert('gs_settings', { setting_key:'brand_name', setting_value: name });
+    if (subRow) await db.update('gs_settings', subRow.id, { setting_value: sub, updated_at: new Date().toISOString() });
+    else await db.insert('gs_settings', { setting_key:'brand_sub', setting_value: sub });
+    // Update appSettings
+    appSettings['brand_name'] = name;
+    appSettings['brand_sub'] = sub;
     applyStoredLogo();
-    toast('Brand settings saved!','success');
-  } catch(e) { toast('Error saving brand settings','error'); }
+    toast('Brand settings saved to all devices!','success');
+  } catch(e) { toast('Error saving brand settings: '+e.message,'error'); }
 }
 
 function removeLogo() {
