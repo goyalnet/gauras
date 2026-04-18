@@ -5373,7 +5373,9 @@ async function approveRegistration(regId) {
   try {
     // Create customer record
     var today = todayStr();
+    var fullName = (r.first_name||'') + (r.last_name?' '+r.last_name:'');
     var custRes = await db.insert('gs_customers', {
+      name: fullName,
       first_name: r.first_name,
       last_name: r.last_name || null,
       phone: r.phone,
