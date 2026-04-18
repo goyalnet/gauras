@@ -1347,7 +1347,7 @@ function renderRoutes() {
 // Global app settings loaded from gs_settings
 var appSettings = {
   morning_delivery_enabled: 'true',
-  evening_delivery_enabled: 'false'
+  evening_delivery_enabled: 'true'
 };
 
 function getSetting(key) { return appSettings[key] === 'true'; }
@@ -4924,19 +4924,23 @@ async function doToggleSession(sessionCode, newVal) {
 async function renderControlPanel() {
   var body = document.getElementById('content');
   body.innerHTML = '<div style="padding:20px;color:var(--text-muted)">Loading...</div>';
-  // Always reload settings fresh
+  // Load ALL data before rendering — settings MUST be loaded first
   try {
     var settingRows = await db.get('gs_settings','order=setting_key.asc');
     settingRows.forEach(function(s){ appSettings[s.setting_key] = s.setting_value; });
-  } catch(e){}
+  } catch(e){ console.log('settings error',e); }
   try { _cpUsers = await db.get('gs_users','order=role.asc,username.asc'); } catch(e){ _cpUsers=[]; }
   try {
     var rows = await db.get('gs_permissions','order=role.asc');
     _cpPerms = {};
     rows.forEach(function(r){ if(!_cpPerms[r.role]) _cpPerms[r.role]={}; _cpPerms[r.role][r.permission_key]=r.allowed; });
   } catch(e){}
+  // Now safe to render — appSettings is populated
   renderCPContent();
 }
+
+// Also make doToggleSession reload CP after toggling
+
 
 function renderCPContent() {
   var mOn = appSettings['morning_delivery_enabled']==='true';
