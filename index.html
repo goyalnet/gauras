@@ -5059,6 +5059,9 @@ async function renderControlPanel() {
     waSettings.provider = appSettings['wa_api_provider']||'';
     waSettings.apiKey = appSettings['wa_api_key']||'';
     waSettings.senderNumber = appSettings['wa_sender_number']||'';
+    // Sync brand settings from Supabase to localStorage
+    if (appSettings['brand_name']) localStorage.setItem('gauras_brand_name', appSettings['brand_name']);
+    if (appSettings['brand_sub']) localStorage.setItem('gauras_brand_sub', appSettings['brand_sub']);
   } catch(e){ console.log('settings error',e); }
   try { _cpUsers = await db.get('gs_users','order=role.asc,username.asc'); } catch(e){ _cpUsers=[]; }
   try {
@@ -5172,14 +5175,28 @@ function renderCPContent() {
     html += '<div><label class="flabel" style="display:block;margin-bottom:5px">Farm / Dairy Name</label>';
     html += '<input class="fcontrol" id="cp-brand-name" style="min-width:200px" placeholder="e.g. Girdhaam Dairy" value="'+esc(localStorage.getItem('gauras_brand_name')||'')+'"></div>';
     html += '<div><label class="flabel" style="display:block;margin-bottom:5px">Tagline (optional)</label>';
-    html += '<input class="fcontrol" id="cp-brand-sub" style="min-width:250px" placeholder="e.g. Fresh Milk Every Morning" value="'+esc(localStorage.getItem('gauras_brand_sub')||'')+'"></div>';
+    html += '<input class="fcontrol" id="cp-brand-sub" style="min-width:250px" placeholder="e.g. Fresh Milk Every Morning" value="'+esc(appSettings['brand_sub']||localStorage.getItem('gauras_brand_sub')||'')+'"></div>';
     html += '<div><button class="btn btn-primary" onclick="saveBrandSettings()">Save Brand</button></div>';
     html += '</div>';
     html += '<div style="padding:0 16px 16px;display:flex;gap:10px;align-items:center">';
     html += '<label class="flabel">Logo</label>';
-    html += '<button class="btn btn-outline" onclick="triggerLogoUpload()">Upload Logo</button>';
-    html += (localStorage.getItem('gauras_logo')?' <button class="btn btn-danger btn-sm" onclick="removeLogo()">Remove Logo</button>':'');
-    if (localStorage.getItem('gauras_logo')) html += '<img src="'+localStorage.getItem('gauras_logo')+'" style="height:40px;object-fit:contain;border-radius:6px;border:1px solid var(--border)">';
+    var logoSrc = appSettings['brand_logo'] || localStorage.getItem('gauras_logo') || '';
+    if (logoSrc) {
+      html += '<div style="margin-bottom:12px;display:flex;align-items:center;gap:12px">';
+      html += '<img src="'+logoSrc+'" style="height:64px;width:64px;object-fit:contain;border-radius:10px;border:1px solid var(--border);background:var(--bg);padding:4px">';
+      html += '<div><div style="font-size:13px;font-weight:600;color:var(--brand)">Logo uploaded</div>';
+      html += '<div style="font-size:12px;color:var(--text-muted);margin-top:2px">Visible on login screen and customer app</div>';
+      html += '<div style="display:flex;gap:6px;margin-top:8px">';
+      html += '<button class="btn btn-outline btn-sm" onclick="triggerLogoUpload()">Change Logo</button>';
+      html += '<button class="btn btn-danger btn-sm" onclick="removeLogo()">Remove</button>';
+      html += '</div></div></div>';
+    } else {
+      html += '<div style="border:2px dashed var(--border);border-radius:10px;padding:20px;text-align:center;margin-bottom:12px;cursor:pointer" onclick="triggerLogoUpload()">';
+      html += '<div style="font-size:32px;margin-bottom:6px">🖼️</div>';
+      html += '<div style="font-size:13px;font-weight:600;color:var(--text-muted)">Click to upload farm logo</div>';
+      html += '<div style="font-size:11px;color:var(--text-hint);margin-top:4px">JPG, PNG under 300KB</div>';
+      html += '</div>';
+    }
     html += '</div></div>';
   }
 
