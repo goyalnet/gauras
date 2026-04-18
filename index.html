@@ -1380,21 +1380,15 @@ function renderMasters() {
 }
 
 function buildMastersTabs() {
-  var shell = document.getElementById('masters-shell');
-  if (!shell) {
-    document.getElementById('content').innerHTML =
-      '<div id="masters-tabs" class="tabs" style="margin-bottom:0"></div>'
-      + '<div id="masters-body" style="margin-top:0"></div>';
-  }
-  var tabEl = document.getElementById('masters-tabs');
-  if (tabEl) {
-    tabEl.innerHTML =
-      '<div class="tab'+(mastersTab==='rate'?' active':'')+'" onclick="setMastersTab(0)">Rate Master</div>'
-      + '<div class="tab'+(mastersTab==='customer'?' active':'')+'" onclick="setMastersTab(1)">Customer Master</div>'
-      + '<div class="tab'+(mastersTab==='route'?' active':'')+'" onclick="setMastersTab(2)">Route Master</div>'
-      + '<div class="tab'+(mastersTab==='sessions'?' active':'')+'" onclick="setMastersTab(3)">🕐 Sessions</div>';
-  }
-}
+  document.getElementById('content').innerHTML =
+    '<div id="masters-tabs" class="tabs" style="margin-bottom:0">'
+    + '<div class="tab'+(mastersTab==='rate'?' active':'')+'" onclick="setMastersTab(0)">Rate Master</div>'
+    + '<div class="tab'+(mastersTab==='customer'?' active':'')+'" onclick="setMastersTab(1)">Customer Master</div>'
+    + '<div class="tab'+(mastersTab==='route'?' active':'')+'" onclick="setMastersTab(2)">Route Master</div>'
+    + '<div class="tab'+(mastersTab==='sessions'?' active':'')+'" onclick="setMastersTab(3)">Sessions</div>'
+    + '</div>'
+    + '<div id="masters-body" style="margin-top:0"></div>';
+}}
 
 function confirmDelCust(id) {
   var c = customers.find(function(x){ return x.id===id; });
