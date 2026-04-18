@@ -758,7 +758,7 @@ const DAY_FULL  = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','
 async function boot() {
   document.getElementById('content').innerHTML =
     '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:60vh;gap:16px;color:var(--text-muted)">'
-    +'<div style="font-size:32px">🥛</div>'
+    +'<div style="font-size:32px">\uD83E\uDD5B</div>'
     +'<div style="font-size:15px;font-weight:600">Loading GauRas...</div>'
     +'<div style="font-size:13px">Connecting to database</div>'
     +'</div>';
@@ -820,7 +820,7 @@ function stopAutoRefresh() {
 
 async function refreshAll() {
   var btn = document.getElementById('refresh-btn');
-  if (btn) { btn.textContent = '⏳ Refreshing...'; btn.disabled = true; }
+  if (btn) { btn.textContent = '\u23F3 Refreshing...'; btn.disabled = true; }
   try {
     routes     = await db.get('gs_routes',    'order=name.asc');
     customers  = await db.get('gs_customers', 'order=last_name.asc,first_name.asc');
@@ -836,7 +836,7 @@ async function refreshAll() {
     go(_currentPage);
     toast('Data refreshed', 'success');
   } catch(e) { toast('Refresh failed: '+e.message, 'error'); }
-  finally { if (btn) { btn.textContent = '⟳ Refresh'; btn.disabled = false; } }
+  finally { if (btn) { btn.textContent = '\u27F3 Refresh'; btn.disabled = false; } }
 }
 
 // ── BRAND LOGO ──
@@ -858,7 +858,7 @@ function handleLogoUpload(input) {
   var file = input.files[0];
   if (!file) return;
   if (!file.type.startsWith('image/')) return toast('Please select an image file','error');
-  if (file.size > 500000) return toast('Image too large — please use an image under 500KB','error');
+  if (file.size > 500000) return toast('Image too large \u2014 please use an image under 500KB','error');
   var reader = new FileReader();
   reader.onload = function(e) {
     var dataUrl = e.target.result;
@@ -973,7 +973,7 @@ function go(page) {
   else if (page === 'sessions') renderSessionControl();
   else if (page === 'reports') { if(!window._reportTab) window._reportTab='summary'; renderReports(); if(window._reportTab==='summary') loadSummaryData(); else if(window._reportTab==='route') renderRouteStatement(); else loadReportData(); }
   else if (page === 'dashboard') { renderDashboard(); }
-  else document.getElementById('content').innerHTML = '<div class="empty"><div class="empty-icon">🚧</div><p>Coming in a future phase.</p></div>';
+  else document.getElementById('content').innerHTML = '<div class="empty"><div class="empty-icon">\uD83D\uDEA7</div><p>Coming in a future phase.</p></div>';
 }
 
 // ── CUSTOMERS ──
@@ -1022,8 +1022,8 @@ function renderCustomers() {
   const resumingToday    = customers.filter(c => c.pause_resume === today && c.pause_from && c.pause_from <= today);
   const resumingTomorrow = customers.filter(c => c.pause_resume === tomorrow && c.pause_from && c.pause_from <= tomorrow);
   const alertsHtml = [
-    ...resumingToday.map(c => `<div class="alert-banner info">🔔 <div><strong>${esc(c.first_name)} ${esc(c.last_name)}</strong> resumes delivery <strong>today</strong>. Route will include them from today.</div></div>`),
-    ...resumingTomorrow.map(c => `<div class="alert-banner warn">⏰ <div><strong>${esc(c.first_name)} ${esc(c.last_name)}</strong> resumes delivery <strong>tomorrow</strong>. Ensure milkman is informed.</div></div>`)
+    ...resumingToday.map(c => `<div class="alert-banner info">\uD83D\uDD14 <div><strong>${esc(c.first_name)} ${esc(c.last_name)}</strong> resumes delivery <strong>today</strong>. Route will include them from today.</div></div>`),
+    ...resumingTomorrow.map(c => `<div class="alert-banner warn">\u23F0 <div><strong>${esc(c.first_name)} ${esc(c.last_name)}</strong> resumes delivery <strong>tomorrow</strong>. Ensure milkman is informed.</div></div>`)
   ].join('');
 
   const dateBarColor = isToday ? 'var(--brand-light)' : isFuture ? '#E6F1FB' : '#f0f3f2';
@@ -1033,7 +1033,7 @@ function renderCustomers() {
   const activeOverrides = overrides.filter(o => o.from_date <= viewDate && o.to_date >= viewDate);
   const ovHtml = activeOverrides.length > 0 ? `
     <div style="background:#E6F1FB;border-radius:var(--radius);padding:12px 16px;margin-bottom:12px;border-left:3px solid #378ADD">
-      <div style="font-size:12px;font-weight:700;color:#0C447C;margin-bottom:8px">⚖️ Temporary Qty. Change Active on ${isToday?'Today':fmtDate(viewDate)} -- ${activeOverrides.length} customer${activeOverrides.length>1?'s':''}</div>
+      <div style="font-size:12px;font-weight:700;color:#0C447C;margin-bottom:8px">\u2696\uFE0F Temporary Qty. Change Active on ${isToday?'Today':fmtDate(viewDate)} -- ${activeOverrides.length} customer${activeOverrides.length>1?'s':''}</div>
       <div style="display:flex;flex-wrap:wrap;gap:8px">
         ${activeOverrides.map(o => {
           const c = customers.find(x => String(x.id)===String(o.customer_id));
@@ -1053,8 +1053,8 @@ function renderCustomers() {
       <span style="font-size:12px;font-weight:700;color:${dateLabelColor};text-transform:uppercase;letter-spacing:0.5px">${dateLabel}</span>
       <input type="date" value="${viewDate}" onchange="viewDate=this.value;renderCustomers()"
         style="padding:5px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:#fff;color:var(--text);outline:none;font-family:inherit">
-      ${!isToday ? `<button onclick="viewDate='${today}';renderCustomers()" style="padding:5px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:#fff;color:var(--text-muted);cursor:pointer;font-family:inherit">↩ Today</button>` : ''}
-      ${isToday ? `<button onclick="viewDate='${tomorrow}';renderCustomers()" style="padding:5px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:#fff;color:#0C447C;cursor:pointer;font-family:inherit">→ Tomorrow</button>` : ''}
+      ${!isToday ? `<button onclick="viewDate='${today}';renderCustomers()" style="padding:5px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:#fff;color:var(--text-muted);cursor:pointer;font-family:inherit">\u21A9 Today</button>` : ''}
+      ${isToday ? `<button onclick="viewDate='${tomorrow}';renderCustomers()" style="padding:5px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:#fff;color:#0C447C;cursor:pointer;font-family:inherit">\u2192 Tomorrow</button>` : ''}
       <span style="font-size:12px;color:${dateLabelColor};margin-left:4px">${!isToday ? `Stats and supply figures shown as they would be on <strong>${fmtDate(viewDate)}</strong> based on scheduled pauses.` : 'Showing live status for today.'}</span>
     </div>
     <div class="stats-grid">
@@ -1101,12 +1101,12 @@ function renderCustomers() {
       <div class="card-header">
         <div class="card-title">Customer List</div>
         <div style="display:flex;gap:8px">
-          <button class="btn btn-outline btn-sm" onclick="exportCSV()">⬇ Export CSV</button>
+          <button class="btn btn-outline btn-sm" onclick="exportCSV()">\u2B07 Export CSV</button>
           <button class="btn btn-primary btn-sm" onclick="openAddCust()">+ Add Customer</button>
         </div>
       </div>
       <div class="toolbar">
-        <div class="search-wrap"><span class="si">🔍</span><input placeholder="Search name, code, phone..." value="${srch}" oninput="srch=this.value;renderCustomers()"></div>
+        <div class="search-wrap"><span class="si">\uD83D\uDD0D</span><input placeholder="Search name, code, phone..." value="${srch}" oninput="srch=this.value;renderCustomers()"></div>
         <select class="flt" onchange="fStatus=this.value;renderCustomers()">
           <option value="">All Status</option>
           <option value="Active" ${fStatus==='Active'?'selected':''}>Active</option>
@@ -1121,7 +1121,7 @@ function renderCustomers() {
       </div>
       <div class="tbl-wrap">
         ${list.length === 0
-          ? `<div class="empty"><div class="empty-icon">👥</div><p>${total===0?'No customers yet. Add your first customer!':'No customers match the current filters.'}</p></div>`
+          ? `<div class="empty"><div class="empty-icon">\uD83D\uDC65</div><p>${total===0?'No customers yet. Add your first customer!':'No customers match the current filters.'}</p></div>`
           : `<table>
               <thead><tr><th>Code</th><th>Name</th><th>Contact</th><th>Address</th><th>Route</th><th>Schedule</th><th>Quota / Day</th><th>Since</th><th>Status</th><th>Actions</th></tr></thead>
               <tbody>${list.map(c => {
@@ -1147,10 +1147,10 @@ function renderCustomers() {
                   <td><span class="badge badge-${c.status||'Active'}">${c.status||'Active'}</span></td>
                   <td>
                     <div class="acts">
-                      <button class="btn btn-outline btn-xs" onclick="openEditCust(${c.id})">✏️ Edit</button>
-                      <button class="btn btn-xs" style="background:#f0f3f2;color:#4a5e58" onclick="openPause(${c.id})">⏸ Pause</button>
-                      <button class="btn btn-xs" style="background:var(--brand-light);color:var(--brand-dark)" onclick="openOverride(${c.id})">⚖️ Qty</button>
-                      <button class="btn btn-danger btn-xs" onclick="confirmDel('customer',${c.id},'${esc((c.first_name||'')+' '+(c.last_name||''))}')">🗑</button>
+                      <button class="btn btn-outline btn-xs" onclick="openEditCust(${c.id})">\u270F\uFE0F Edit</button>
+                      <button class="btn btn-xs" style="background:#f0f3f2;color:#4a5e58" onclick="openPause(${c.id})">\u23F8 Pause</button>
+                      <button class="btn btn-xs" style="background:var(--brand-light);color:var(--brand-dark)" onclick="openOverride(${c.id})">\u2696\uFE0F Qty</button>
+                      <button class="btn btn-danger btn-xs" onclick="confirmDel('customer',${c.id},'${esc((c.first_name||'')+' '+(c.last_name||''))}')">\uD83D\uDDD1</button>
                     </div>
                     ${ovBadge(c.id)}
                   </td>
@@ -1162,7 +1162,7 @@ function renderCustomers() {
     </div>`;
 }
 
-// ── ROUTES ──
+// \u2500\u2500 ROUTES \u2500\u2500
 function sortIcon(col) {
   if (pauseSortCol !== col) return '<span style="color:var(--text-hint);font-size:10px">⇅</span>';
   return pauseSortDir === 'asc' ? '↑' : '↓';
@@ -1183,28 +1183,28 @@ function renderRoutes() {
   const rvdLabelColor = rvdIsToday ? 'var(--brand-dark)' : rvdIsFuture ? '#0C447C' : 'var(--text-muted)';
 
   const cards = routes.length === 0
-    ? `<div class="empty"><div class="empty-icon">🗺️</div><p>No routes yet. Add your first route!</p></div>`
+    ? `<div class="empty"><div class="empty-icon">\uD83D\uDDFA\uFE0F</div><p>No routes yet. Add your first route!</p></div>`
     : `<div class="route-grid">${routes.map(r => {
         const cc = customers.filter(c => c.route_id===r.id).length;
         const ll = customers.filter(c => c.route_id===r.id).reduce((s,c)=>s+(c.morning_quota||0)+(c.evening_quota||0),0);
         const maxC = Math.max(1,...routes.map(x=>customers.filter(c=>c.route_id===x.id).length));
         return `<div class="route-card">
           <div style="display:flex;justify-content:space-between;align-items:flex-start">
-            <div><div class="rc-name">🗺️ ${esc(r.name)}</div><div style="font-size:12px;color:var(--text-muted);margin-top:2px">${esc(r.area||'')}${r.milkman?' · '+esc(r.milkman):''}</div></div>
+            <div><div class="rc-name">\uD83D\uDDFA\uFE0F ${esc(r.name)}</div><div style="font-size:12px;color:var(--text-muted);margin-top:2px">${esc(r.area||'')}${r.milkman?' · '+esc(r.milkman):''}</div></div>
             <span class="badge badge-route">${esc(r.delivery_time||'Both')}</span>
           </div>
-          <div class="rc-meta"><span>👥 ${cc} customers</span><span>🥛 ${ll.toFixed(1)}L/day</span></div>
+          <div class="rc-meta"><span>\uD83D\uDC65 ${cc} customers</span><span>\uD83E\uDD5B ${ll.toFixed(1)}L/day</span></div>
           <div class="rc-bar"><div class="rc-bar-fill" style="width:${Math.round(cc/maxC*100)}%"></div></div>
           ${r.notes?`<div style="font-size:11px;color:var(--text-hint);margin-top:8px">${esc(r.notes)}</div>`:''}
           <div style="display:flex;gap:6px;margin-top:12px;flex-wrap:wrap">
-            <button class="btn btn-outline btn-sm" style="flex:1" onclick="openEditRoute(${r.id})">✏️ Edit</button>
-            <button class="btn btn-sm" style="background:var(--brand-light);color:var(--brand-dark);flex:1" onclick="openSequencer(${r.id})">⟳ Arrange</button>
-            <button class="btn btn-danger btn-sm" onclick="confirmDel('route',${r.id},'${esc(r.name)}')">🗑</button>
+            <button class="btn btn-outline btn-sm" style="flex:1" onclick="openEditRoute(${r.id})">\u270F\uFE0F Edit</button>
+            <button class="btn btn-sm" style="background:var(--brand-light);color:var(--brand-dark);flex:1" onclick="openSequencer(${r.id})">\u27F3 Arrange</button>
+            <button class="btn btn-danger btn-sm" onclick="confirmDel('route',${r.id},'${esc(r.name)}')">\uD83D\uDDD1</button>
           </div>
         </div>`;
       }).join('')}</div>`;
 
-  // ── PAUSED TABLE -- based on routeViewDate ──
+  // \u2500\u2500 PAUSED TABLE -- based on routeViewDate \u2500\u2500
   let pausedCustomers = customers.filter(c => isOnPause(c, routeViewDate));
   if (pauseFilterRoute) pausedCustomers = pausedCustomers.filter(c => String(c.route_id) === String(pauseFilterRoute));
   pausedCustomers = [...pausedCustomers].sort((a, b) => {
@@ -1234,8 +1234,8 @@ function renderRoutes() {
       </td>
       <td>${(c.morning_quota||0)+(c.evening_quota||0)}L/day</td>
       <td>
-        <button class="btn btn-primary btn-xs" onclick="savePauseDates(${c.id})">💾 Save</button>
-        <button class="btn btn-danger btn-xs" style="margin-top:4px" onclick="clearPause(${c.id})">✕ Clear</button>
+        <button class="btn btn-primary btn-xs" onclick="savePauseDates(${c.id})">\uD83D\uDCBE Save</button>
+        <button class="btn btn-danger btn-xs" style="margin-top:4px" onclick="clearPause(${c.id})">\u2715 Clear</button>
       </td>
     </tr>`;
   }).join('');
@@ -1247,7 +1247,7 @@ function renderRoutes() {
   const pausedReport = `
     <div class="card" style="margin-bottom:16px">
       <div class="card-header">
-        <div class="card-title">⏸ Paused Customers</div>
+        <div class="card-title">\u23F8 Paused Customers</div>
         <div style="display:flex;align-items:center;gap:8px">
           <select class="flt" onchange="pauseFilterRoute=this.value;renderRoutes()" style="font-size:12px;padding:5px 10px">${routeOpts}</select>
           <div style="font-size:12px;color:var(--text-muted)">${allPaused.length} on hold${pauseFilterRoute?' · '+pausedCustomers.length+' shown':''}</div>
@@ -1266,7 +1266,7 @@ function renderRoutes() {
       </div>
     </div>`;
 
-  // ── OVERRIDES TABLE -- only show entries active on routeViewDate (same as paused logic) ──
+  // \u2500\u2500 OVERRIDES TABLE -- only show entries active on routeViewDate (same as paused logic) \u2500\u2500
   const activeOvs = overrides.filter(o => o.from_date <= routeViewDate && o.to_date >= routeViewDate);
   const ovRouteOpts = '<option value="">All Routes</option>' +
     routes.map(r => `<option value="${r.id}">${esc(r.name)}</option>`).join('');
@@ -1298,8 +1298,8 @@ function renderRoutes() {
       <td>${o.from_date===o.to_date ? fmtDate(o.from_date) : fmtDate(o.from_date)+' → '+fmtDate(o.to_date)}</td>
       <td style="font-size:12px;color:var(--text-hint)">${esc(o.reason||'--')}</td>
       <td><div class="acts">
-        <button class="btn btn-outline btn-xs" onclick="openEditOverride(${o.id})">✏️ Edit</button>
-        <button class="btn btn-danger btn-xs" onclick="deleteOverride(${o.id})">🗑</button>
+        <button class="btn btn-outline btn-xs" onclick="openEditOverride(${o.id})">\u270F\uFE0F Edit</button>
+        <button class="btn btn-danger btn-xs" onclick="deleteOverride(${o.id})">\uD83D\uDDD1</button>
       </div></td>
     </tr>`;
   }).join('');
@@ -1311,7 +1311,7 @@ function renderRoutes() {
   const ovReport = `
     <div class="card" style="margin-bottom:16px">
       <div class="card-header">
-        <div class="card-title">⚖️ Temporary Qty. Changes</div>
+        <div class="card-title">\u2696\uFE0F Temporary Qty. Changes</div>
         <div style="font-size:12px;color:var(--text-muted)">${activeOvs.length} customer${activeOvs.length!==1?'s':''} with modified qty on ${rvdIsToday?'today':fmtDate(routeViewDate)}</div>
       </div>
       <div class="tbl-wrap">
@@ -1333,8 +1333,8 @@ function renderRoutes() {
         <input type="date" value="${routeViewDate}" onchange="routeViewDate=this.value;renderRoutes()"
           style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:#fff;color:var(--text);outline:none;font-family:inherit">
         ${rvdIsToday
-          ? `<button onclick="routeViewDate='${rvdTomorrow}';renderRoutes()" style="padding:4px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:#fff;color:#0C447C;cursor:pointer;font-family:inherit">→ Tomorrow</button>`
-          : `<button onclick="routeViewDate='${todayReal}';renderRoutes()" style="padding:4px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:#fff;color:var(--text-muted);cursor:pointer;font-family:inherit">↩ Today</button>`}
+          ? `<button onclick="routeViewDate='${rvdTomorrow}';renderRoutes()" style="padding:4px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:#fff;color:#0C447C;cursor:pointer;font-family:inherit">\u2192 Tomorrow</button>`
+          : `<button onclick="routeViewDate='${todayReal}';renderRoutes()" style="padding:4px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:#fff;color:var(--text-muted);cursor:pointer;font-family:inherit">\u21A9 Today</button>`}
         <span style="font-size:12px;color:${rvdLabelColor}">${rvdIsToday ? 'Showing paused customers and qty. changes for today.' : `Showing paused customers and qty. changes for ${fmtDate(routeViewDate)}.`}</span>
       </div>
       <button class="btn btn-primary" onclick="openAddRoute()">+ Add Route</button>
@@ -1344,7 +1344,7 @@ function renderRoutes() {
     <div class="card"><div class="card-body">${cards}</div></div>`;
 }
 
-// ── MASTERS ──
+// \u2500\u2500 MASTERS \u2500\u2500
 // Global app settings loaded from gs_settings
 var appSettings = {
   morning_delivery_enabled: 'true',
@@ -1460,7 +1460,7 @@ function renderRateMaster() {
     <div class="card">
       <div class="card-header"><div class="card-title">Rate History</div><div style="font-size:12px;color:var(--text-muted)">${rates.length} ${rates.length===1?'entry':'entries'}</div></div>
       ${rates.length===0
-        ? `<div class="empty"><div class="empty-icon">💰</div><p>No rates set yet. Add your starting rate above.</p></div>`
+        ? `<div class="empty"><div class="empty-icon">\uD83D\uDCB0</div><p>No rates set yet. Add your starting rate above.</p></div>`
         : `<div class="tbl-wrap"><table class="rate-tbl"><thead><tr><th>Status</th><th>Rate</th><th>Effective From</th><th>Notes</th><th>Added On</th></tr></thead><tbody>${histRows}</tbody></table></div>`}
     </div>
     <div class="card" style="margin-top:16px">
@@ -1623,7 +1623,7 @@ function renderRouteMaster() {
   var b = getMastersBody(); if(b) b.innerHTML = html;
 }
 
-// ── CUSTOMER MODAL ──
+// \u2500\u2500 CUSTOMER MODAL \u2500\u2500
 function openAddCust() {
   if (!can('feat_add_customer')) return toast("You don't have permission to add customers",'error');
   editCustId = null;
@@ -1739,7 +1739,7 @@ async function saveCustomer() {
   } catch(e) { toast('Error: '+e.message,'error'); }
 }
 
-// ── ROUTE MODAL ──
+// \u2500\u2500 ROUTE MODAL \u2500\u2500
 function openAddRoute() {
   if (!can('feat_add_route')) return toast("You don't have permission to add routes",'error');
   editRouteId=null;
@@ -1791,7 +1791,7 @@ async function saveRate() {
   } catch(e) { toast('Error: '+e.message,'error'); }
 }
 
-// ── DELETE ──
+// \u2500\u2500 DELETE \u2500\u2500
 function confirmDel(type,id,name) {
   if (type==='customer' && !can('feat_delete_customer')) return toast("You don't have permission to delete customers",'error');
   if (type==='route' && !can('feat_add_route')) return toast("You don't have permission to delete routes",'error');
@@ -1813,7 +1813,7 @@ async function doDel(type,id) {
   } catch(e) { toast('Error: '+e.message,'error'); }
 }
 
-// ── EXPORT ──
+// \u2500\u2500 EXPORT \u2500\u2500
 function exportCSV() {
   if (!can('feat_export')) return toast("You don't have permission to export",'error');
   const hdr=['Code','First Name','Last Name','Phone','WhatsApp','Building','Flat','Floor','Street','City','PIN','State','Route','Morning(L)','Evening(L)','Deposit(Rs.)','Grace Days','Payment','Status','Schedule','Delivery Days','Joining Date','Pause From','Resume On','Delivery Notes'];
@@ -1954,7 +1954,7 @@ function autoStatus(currentStatus, pauseFrom, pauseTo) {
 }
 
 
-// ── QUANTITY OVERRIDES ──
+// \u2500\u2500 QUANTITY OVERRIDES \u2500\u2500
 let editingOverrideCustId = null;
 let editingOverrideId = null; // null = new, number = editing existing
 
@@ -1964,8 +1964,8 @@ function ovBadge(custId) {
   const c = customers.find(x => x.id === custId);
   const paused = c && isOnPause(c, today);
   return [
-    paused ? `<div style="font-size:10px;color:#4a5e58;background:#f0f3f2;padding:2px 6px;border-radius:4px;margin-top:3px;display:inline-block">⏸ Paused${c.pause_resume?' · resumes '+fmtDate(c.pause_resume):''}</div>` : '',
-    active.length ? `<div style="font-size:10px;color:#0C447C;background:#E6F1FB;padding:2px 6px;border-radius:4px;margin-top:3px;display:inline-block">⚖️ Qty change active</div>` : ''
+    paused ? `<div style="font-size:10px;color:#4a5e58;background:#f0f3f2;padding:2px 6px;border-radius:4px;margin-top:3px;display:inline-block">\u23F8 Paused${c.pause_resume?' · resumes '+fmtDate(c.pause_resume):''}</div>` : '',
+    active.length ? `<div style="font-size:10px;color:#0C447C;background:#E6F1FB;padding:2px 6px;border-radius:4px;margin-top:3px;display:inline-block">\u2696\uFE0F Qty change active</div>` : ''
   ].join('');
 }
 
@@ -2081,7 +2081,7 @@ function getEffectiveQty(custId, dateStr) {
   return { morning: active[0].morning_qty, evening: active[0].evening_qty, reason: active[0].reason };
 }
 
-// ── INLINE PAUSE EDITING ──
+// \u2500\u2500 INLINE PAUSE EDITING \u2500\u2500
 async function savePauseDates(custId) {
   const pf = document.getElementById('pf-'+custId).value || null;
   const pr = document.getElementById('pr-'+custId).value || null;
@@ -2110,9 +2110,9 @@ async function clearPause(custId) {
   } catch(e) { toast('Error: '+e.message,'error'); }
 }
 
-// ══════════════════════════════════════
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
 // WALLET MODULE -- Phase 2B
-// ══════════════════════════════════════
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
 
 let walletSearch = '', walletFilterStatus = '', walletCustId = null;
 
@@ -2149,8 +2149,8 @@ function balanceColor(balance) {
   return 'zero';
 }
 
-// ── RENDER WALLET PAGE ──
-// ── NOTIONAL BALANCE (after today's delivery) ──
+// \u2500\u2500 RENDER WALLET PAGE \u2500\u2500
+// \u2500\u2500 NOTIONAL BALANCE (after today's delivery) ──
 function notionalBalance(c) {
   const today = todayStr();
   const w = getWallet(c.id);
@@ -2190,7 +2190,7 @@ function notionalStatusBadge(ns) {
   if (ns.done) {
     var doneColor = ns.bal > 0 ? 'var(--brand)' : ns.bal === 0 ? 'var(--accent)' : 'var(--danger)';
     return '<div style="font-weight:700;color:'+doneColor+'">Rs.'+(ns.bal>=0?ns.bal.toFixed(0):'-'+Math.abs(ns.bal).toFixed(0))+'</div>'
-      + '<div class="td-sub" style="color:var(--brand)">✓ Delivered today</div>';
+      + '<div class="td-sub" style="color:var(--brand)">\u2713 Delivered today</div>';
   }
   if (ns.note) return '<span style="font-size:11px;color:var(--text-hint)">'+ns.note+'</span>';
   var balStr = ns.bal >= 0 ? 'Rs.'+ns.bal.toFixed(0) : '-Rs.'+Math.abs(ns.bal).toFixed(0);
@@ -2362,7 +2362,7 @@ async function openWalletDetail(custId) {
       </div>
       <div class="wallet-stat">
         <div class="wallet-stat-label">Days Remaining</div>
-        <div class="wallet-stat-val" style="color:${days<3?'var(--danger)':days<7?'var(--accent)':'var(--brand)'}">${days===999?'∞':days}</div>
+        <div class="wallet-stat-val" style="color:${days<3?'var(--danger)':days<7?'var(--accent)':'var(--brand)'}">${days===999?'\u221E':days}</div>
         <div class="td-sub" style="margin-top:4px">at current usage</div>
       </div>
     </div>
@@ -2384,7 +2384,7 @@ async function openWalletDetail(custId) {
         <div style="font-size:12px;color:var(--text-muted)">Last 90 days</div>
       </div>
       ${custDeliveries.length===0
-        ? '<div class="empty"><div class="empty-icon">🚴</div><p>No delivery records found.</p></div>'
+        ? '<div class="empty"><div class="empty-icon">\uD83D\uDEB4</div><p>No delivery records found.</p></div>'
         : '<div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Session</th><th>Qty</th><th>Status</th><th>Deducted</th><th>Empties</th></tr></thead><tbody>'
           + custDeliveries.map(function(d){
               var sc = d.status==='Delivered'?'var(--brand)':d.status==='Partial'?'var(--accent)':'var(--danger)';
@@ -2608,9 +2608,9 @@ function exportWalletCSV() {
   a.click();
 }
 
-// ══════════════════════════════════════
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
 // DAILY DELIVERY MODULE -- Phase 2C
-// ══════════════════════════════════════
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
 
 let deliveryRoute = '';
 let deliverySession = 'Morning';
@@ -4688,16 +4688,16 @@ function printRouteList() {
   setTimeout(function(){ win.print(); }, 500);
 }
 
-// ══════════════════════════════════════
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
 // AUTH + CONTROL PANEL
-// ══════════════════════════════════════
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
 
 // Current session
 var _session = null; // { user, role, routeId, permissions }
 var _users = [];
 var _permissions = {};
 
-// Simple MD5-like hash (using btoa for simplicity — not cryptographic)
+// Simple MD5-like hash (using btoa for simplicity \u2014 not cryptographic)
 function hashPassword(pw) {
   // Simple hash: base64 of reversed password + salt
   // For production use a proper hash, but this prevents plain text storage
@@ -4857,7 +4857,7 @@ function checkExistingSession() {
     var saved = localStorage.getItem('gauras_session') || sessionStorage.getItem('gauras_session');
     if (saved) {
       var s = JSON.parse(saved);
-      // Validate and restore — reload user from DB
+      // Validate and restore \u2014 reload user from DB
       db.get('gs_users','id=eq.'+s.userId+'&is_active=eq.true').then(function(users){
         if (users && users.length>0) {
           var user = users[0];
@@ -4881,7 +4881,7 @@ function checkExistingSession() {
   return false;
 }
 
-// ── CONTROL PANEL ──
+// \u2500\u2500 CONTROL PANEL \u2500\u2500
 var _cpUsers = [];
 var _cpPerms = {};
 
@@ -4951,7 +4951,7 @@ async function doToggleSession(sessionCode, newVal) {
 async function renderControlPanel() {
   var body = document.getElementById('content');
   body.innerHTML = '<div style="padding:20px;color:var(--text-muted)">Loading...</div>';
-  // Load ALL data before rendering — settings MUST be loaded first
+  // Load ALL data before rendering \u2014 settings MUST be loaded first
   try {
     var settingRows = await db.get('gs_settings','order=setting_key.asc');
     settingRows.forEach(function(s){ appSettings[s.setting_key] = s.setting_value; });
@@ -4962,7 +4962,7 @@ async function renderControlPanel() {
     _cpPerms = {};
     rows.forEach(function(r){ if(!_cpPerms[r.role]) _cpPerms[r.role]={}; _cpPerms[r.role][r.permission_key]=r.allowed; });
   } catch(e){}
-  // Now safe to render — appSettings is populated
+  // Now safe to render \u2014 appSettings is populated
   renderCPContent();
 }
 
@@ -5244,9 +5244,9 @@ async function saveResetPassword() {
   } catch(e) { toast('Error: '+e.message,'error'); }
 }
 
-// ══════════════════════════════════════
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
 // PAUSE REQUESTS (from Customer App)
-// ══════════════════════════════════════
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
 async function renderRegistrations() {
   var body = document.getElementById('content');
   body.innerHTML = '<div style="padding:20px;color:var(--text-muted)">Loading...</div>';
@@ -5483,7 +5483,7 @@ async function reviewPause(reqId, statusCode) {
   } catch(e) { toast('Error: '+e.message,'error'); }
 }
 
-// ── HELPERS ──
+// \u2500\u2500 HELPERS \u2500\u2500
 const v   = id => (document.getElementById(id)||{}).value||'';
 const esc = s  => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 function fmtDate(d) {
@@ -5497,7 +5497,7 @@ document.querySelectorAll('.backdrop').forEach(b=>b.addEventListener('click',e=>
 function toast(msg,type='info') {
   const el=document.createElement('div');
   el.className=`toast toast-${type}`;
-  el.innerHTML=`<span>${type==='success'?'✓':type==='error'?'✗':'ℹ'}</span> ${msg}`;
+  el.innerHTML=`<span>${type==='success'?'\u2713':type==='error'?'\u2717':'\u2139'}</span> ${msg}`;
   document.getElementById('toasts').appendChild(el);
   setTimeout(()=>el.remove(),3200);
 }
