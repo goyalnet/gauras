@@ -726,6 +726,19 @@
 </div>
 
 <script>
+// ── NOTIFICATIONS ──
+async function sendNotification(customerId, title, message, type) {
+  try {
+    await db.insert('gs_notifications', {
+      customer_id: customerId,
+      title: title,
+      message: message,
+      type: type || 'info',
+      is_read: false
+    });
+  } catch(e) { console.log('Notification error:', e.message); }
+}
+
 // ── WASETTINGS (declared early for use throughout) ──
 var waSettings = { enabled:false, provider:'', apiKey:'', senderNumber:'' };
 
@@ -1456,6 +1469,19 @@ function buildMastersTabs() {
     + '<div id="masters-body" style="margin-top:0"></div>';
 }
 
+async function adminResetCustomerPIN(custId) {
+  var c = customers.find(function(x){ return x.id===custId; });
+  if (!c) return;
+  if (!confirm('Reset PIN for '+c.first_name+' '+c.last_name+'? They will be prompted to set a new PIN on next login.')) return;
+  try {
+    await db.update('gs_customers', custId, { customer_pin: null, pin_set_at: null });
+    var ci = customers.findIndex(function(x){ return x.id===custId; });
+    if (ci !== -1) { customers[ci].customer_pin = null; customers[ci].pin_set_at = null; }
+    sendNotification(custId, 'PIN Reset', 'Your login PIN has been reset by the dairy admin. Please set a new PIN when you next login.', 'info');
+    toast('PIN reset successfully. Customer will set new PIN on next login.', 'success');
+  } catch(e) { toast('Error: '+e.message, 'error'); }
+}
+
 function confirmDelCust(id) {
   var c = customers.find(function(x){ return x.id===id; });
   if (!c) return;
@@ -1568,6 +1594,7 @@ function renderCustomerMaster() {
       + '<td><span class="badge badge-'+(c.status||'Active')+'">'+(c.status||'Active')+'</span></td>'
       + '<td><div class="acts">'
       + '<button class="btn btn-outline btn-xs" onclick="openEditCust('+c.id+')">Edit</button>'
+      + '<button class="btn btn-outline btn-xs" onclick="adminResetCustomerPIN('+c.id+')">Reset PIN</button>'
       + '<button class="btn btn-danger btn-xs" onclick="confirmDelCust('+c.id+')">Delete</button>'
       + '</div></td>'
       + '</tr>';
@@ -2640,15 +2667,15 @@ async function saveTopup() {
       var brandName3 = localStorage.getItem('gauras_brand_name') || appSettings['brand_name'] || 'GauRas Milk';
       var receiptMsg2 = waMsgTopupReceipt(c2.first_name||'', amount, newBal2.toFixed(0), fmtDate(date), topupData.payment_mode||'Cash', brandName3);
       if (waSettings.enabled) {
-        // Auto-send via API
         sendWhatsApp(wa, receiptMsg2);
       } else {
-        // Ask before opening WA
         if (confirm('Top-up saved! Send WhatsApp receipt to '+c2.first_name+'?')) {
           sendWhatsApp(wa, receiptMsg2);
         }
       }
     }
+    // Send in-app notification to customer
+    sendNotification(walletCustId, 'Top-up Received', 'Rs.'+amount+' credited to your wallet. New balance: Rs.'+newBal2.toFixed(0)+'.', 'success');
 
     // Refresh current view
     if (walletCustId && document.getElementById('content').innerHTML.includes('Back to Wallets')) {
@@ -5608,6 +5635,8 @@ async function approveRegistration(regId) {
     });
 
     toast(r.first_name+' approved and added as customer!','success');
+    // Send in-app notification
+    sendNotification(newCustId, 'Welcome to '+( localStorage.getItem('gauras_brand_name')||'GauRas')+'!', 'Your registration has been approved. Please top up your wallet to start delivery.', 'success');
     // Send WhatsApp notification
     var wa2 = (r.whatsapp||r.phone||'');
     if (wa2) {
@@ -5724,6 +5753,16 @@ async function reviewPause(reqId, statusCode) {
       }
     }
     toast('Request '+status.toLowerCase()+' successfully', 'success');
+    // Send in-app notification to customer
+    var pauseReqData = await db.get('gs_pause_requests','id=eq.'+reqId);
+    if (pauseReqData && pauseReqData.length > 0) {
+      var pr = pauseReqData[0];
+      var pauseTitle = status==='Approved' ? 'Pause Request Approved' : 'Pause Request Rejected';
+      var pauseMsg = status==='Approved'
+        ? 'Your delivery pause from '+fmtDate(pr.from_date)+' to '+fmtDate(pr.to_date)+' has been approved.'
+        : 'Your pause request from '+fmtDate(pr.from_date)+' to '+fmtDate(pr.to_date)+' was not approved. Please contact your dairy.';
+      sendNotification(pr.customer_id, pauseTitle, pauseMsg, status==='Approved'?'success':'warning');
+    }
     renderPauseRequests();
   } catch(e) { toast('Error: '+e.message,'error'); }
 }
